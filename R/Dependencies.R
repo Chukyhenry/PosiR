@@ -21,11 +21,7 @@ usethis::use_package("parallel")
 # For the new plot method
 usethis::use_package("graphics", type = "Imports") # For basic plotting functions
 # For parallel processing (base R, but good to declare import)
-usethis::use_package("parallel")
-# pbapply is already in Suggests, which is fine as it's optional
 
-# For the new plot method
-usethis::use_package("graphics", type = "Imports") # For basic plotting functions
 # Creates vignettes/PosiR-introduction.Rmd
 usethis::use_vignette("PosiR-introduction")
 # Creates tests/testthat.R and tests/testthat/test-simultaneous_ci.R

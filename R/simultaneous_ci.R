@@ -1,102 +1,55 @@
-#' Calculate Simultaneous Confidence Intervals using Bootstrap (Algorithm 1)
+#' Compute Simultaneous Confidence Intervals via Bootstrap (Post-Selection Inference)
 #'
-#' Implements Algorithm 1 from Kuchibhotla et al. (2022) via bootstrap
-#' for simultaneous confidence intervals over coefficients within a universe
-#' of linear models. Supports parallel execution for the bootstrap loop.
+#' Implements Algorithm 1 from Kuchibhotla et al. (2022) using bootstrap-based max-t statistics
+#' to construct valid simultaneous confidence intervals for selected regression coefficients
+#' across a user-specified universe of linear models.
 #'
-#' @details
-#' This function implements the bootstrap procedure described in Algorithm 1
-#' of Kuchibhotla et al. (2022) for simultaneous inference, primarily targeting
-#' coefficients in linear regression models fit using Ordinary Least Squares.
+#' Supports parallel execution, internal warnings capture, and returns structured results
+#' with estimates, intervals, bootstrap diagnostics, and inference statistics.
 #'
-#' The core computation involves repeated model fitting on bootstrap samples.
-#' Parallel processing is highly recommended for larger problems (set `cores > 1`).
+#' @param X Numeric matrix (n x p): Design matrix. Must have unique column names.
+#'          Do not include an intercept if `add_intercept = TRUE`.
+#' @param y Numeric vector (length n): Response vector.
+#' @param Q_universe Named list of numeric vectors. Each element specifies a model as a
+#'        vector of column indices (accounting for intercept if `add_intercept = TRUE`).
+#'        Names are used to identify each model in results.
+#' @param alpha Significance level for the confidence intervals. Default is 0.05.
+#' @param B Integer. Number of bootstrap samples. Default is 1000.
+#' @param add_intercept Logical. If TRUE, adds an intercept as the first column of the design matrix. Default is TRUE.
+#' @param bootstrap_method Character. Bootstrap type. Only "pairs" is currently supported.
+#' @param cores Integer. Number of CPU cores to use for bootstrap parallelization. Default is 1.
+#' @param use_pbapply Logical. Use `pbapply` for progress bars if available. Default is TRUE.
+#' @param seed Optional numeric. Random seed for reproducibility. Used for parallel-safe RNG.
+#' @param verbose Logical. Whether to display status messages. Default is TRUE.
+#' @param ... Reserved for future use.
 #'
-#' The calculation of the bootstrap variance estimate \eqn{\widehat{\Psi}_{n,q,j}} uses
-#' the formula \eqn{(n_{valid} - 1)^{-1} \sum_{b \in valid} [ \sqrt{n} ( \widehat{\theta}_{q,j}^{*b} - \widehat{\theta}_{q,j} ) ]^2},
-#' based on the valid bootstrap samples obtained.
+#' @return A list of class `simultaneous_ci_result` with elements:
 #'
-#' For constructing the final confidence intervals, bootstrap variance estimates
-#' (\eqn{\widehat{\Psi}_{n,q,j}}) smaller than an internal threshold (currently 1e-12)
-#' are treated as zero, resulting in a zero-width interval centered at the point
-#' estimate; a warning is issued in such cases.
-#'
-#' Memory usage can be substantial for a large number of bootstrap samples (`B`),
-#' many models in `Q_universe`, or models with many parameters, primarily due
-#' to storing intermediate bootstrap estimates.
-#'
-#' Note on `X`: For reliable coefficient mapping, the input design matrix `X`
-#' (and the intercept if `add_intercept=TRUE`) should have unique column names.
-#'
-#' @param X Design matrix (numeric matrix, n x p). Should not include an intercept column
-#'          if 'add_intercept = TRUE'. **Must have unique column names.**
-#' @param y Response vector (numeric vector, length n).
-#' @param Q_universe A list specifying the universe of models. Each element of the list
-#'                   should be a vector of column indices (from the design matrix
-#'                   including the intercept if `add_intercept=TRUE`) defining a model.
-#'                   The list should be named, as names are used for model IDs.
-#'                   Example: `list(model1 = c(1, 2), model2 = c(1, 3, 4))` assuming intercept is col 1.
-#' @param alpha Significance level (e.g., 0.05 for 95% confidence).
-#' @param B Number of bootstrap samples. Should be reasonably large (e.g., >= 1000).
-#' @param add_intercept Logical. If TRUE, an intercept term is added as the first column
-#'                      of the design matrix. Defaults to TRUE.
-#' @param bootstrap_method Type of bootstrap. Currently only "pairs" (resampling rows of (X, y))
-#'                         is implemented.
-#' @param cores Number of CPU cores to use for parallel processing of bootstrap samples.
-#'              If `cores > 1`, requires the `parallel` package. Defaults to 1 (no parallelization).
-#'              Set to `parallel::detectCores()` or similar for maximum available cores.
-#' @param use_pbapply Logical. If TRUE and the `pbapply` package is installed, uses progress
-#'                    bars from `pbapply`, which also works with parallel execution.
-#'                    Otherwise, uses base R `txtProgressBar` (only for sequential execution).
-#'                    Defaults to TRUE.
-#' @param seed Optional seed for reproducibility, especially important for parallel computations.
-#'             If provided (`is.numeric`), it's used with `parallel::clusterSetRNGStream` or `set.seed`.
-#' @param verbose Logical. If TRUE (default), prints intermediate status messages. Set to FALSE
-#'                to suppress messages.
-#' @param ... Additional arguments (currently unused).
-#'
-#' @return A list object of class `simultaneous_ci_result` containing:
-#'         - `intervals`: Data frame with results (estimates, CIs, variance estimates).
-#'         - `K_alpha`: Computed (1-alpha) quantile of the max-t statistics.
-#'         - `alpha`: Significance level used.
-#'         - `B`: Number of bootstrap samples requested.
-#'         - `n_valid_T_star_b`: Number of finite \( T^{*b} \) values obtained.
-#'         - `T_star_b`: Vector of the B bootstrap max-t statistics (may contain NAs).
-#'         - `bootstrap_method`: Bootstrap method used.
-#'         - `warnings_list`: List containing warnings generated during execution (each item has `context` and `message`).
-#'         - `valid_bootstrap_counts`: Counts of valid bootstrap samples used per parameter variance estimate.
-#'         - `n_bootstrap_errors`: Count of bootstrap iterations encountering errors during model fitting.
+#' - `intervals`: Data frame with estimates, confidence intervals, variances, and SEs
+#' - `K_alpha`: Bootstrap (1 - alpha) quantile of max-t statistics
+#' - `T_star_b`: Vector of bootstrap max-t statistics
+#' - `n_valid_T_star_b`: Number of finite bootstrap max-t statistics
+#' - `alpha`, `B`, `bootstrap_method`: Metadata
+#' - `warnings_list`: Internal warnings collected during bootstrap/model fitting
+#' - `valid_bootstrap_counts`: Valid bootstrap replicates per parameter
+#' - `n_bootstrap_errors`: Total bootstrap fitting errors
 #'
 #' @references
-#' Arun K Kuchibhotla, John E Kolassa, and Todd A Kuffner.
-#' Post-selection inference.
-#' Annual Review of Statistics and Its Application, 9(1):505–527, 2022.
+#' Kuchibhotla, A., Kolassa, J., & Kuffner, T. (2022). Post-selection inference.
+#' *Annual Review of Statistics and Its Application*, 9(1), 505–527.
 #'
 #' @export
 #' @importFrom stats lm.fit quantile setNames sd var qnorm
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @import parallel
-#' @suggests pbapply
-#'
 #' @examples
-#' \dontrun{
 #' set.seed(123)
-#' n <- 100
-#' p <- 4
-#' X <- matrix(rnorm(n * p), n, p, dimnames=list(NULL, paste0("X",1:p)))
-#' beta_true <- c(1, 0.5, 0, -0.5, 0)
-#' X_design_true <- cbind(1, X); colnames(X_design_true)[1] <- "(Intercept)"
-#' y <- X_design_true %*% beta_true + rnorm(n, sd = 1.5)
-#'
-#' Q_models <- list( m1=1:2, m2=c(1,2,4), mall=1:5 )
-#'
-#' # Sequential, verbose (default)
-#' results_seq <- simultaneous_ci(X, y, Q_models, B = 100, cores = 1)
-#'
-#' # Parallel, quiet, set seed
-#' results_par <- simultaneous_ci(X, y, Q_models, B = 100, cores = 2, seed = 42, verbose = FALSE)
-#' print(results_par$K_alpha)
-#' plot(results_par)
+#' X <- matrix(rnorm(100 * 2), 100, 2, dimnames = list(NULL, c("X1", "X2")))
+#' y <- X[,1] * 0.5 + rnorm(100)
+#' Q <- list(model = 1:2)
+#' res <- simultaneous_ci(X, y, Q, B = 100, cores = 1)
+#' print(res$intervals)
+#' plot(res)
 #' }
 simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
                             add_intercept = TRUE, bootstrap_method = "pairs",
@@ -112,7 +65,12 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
   p_orig <- ncol(X)
   if (n != length(y)) stop("Number of rows in X must match length of y.")
   if (!is.list(Q_universe) || length(Q_universe) == 0) stop("Q_universe must be a non-empty list.")
-  if (is.null(names(Q_universe)) || any(names(Q_universe) == "")) stop("Q_universe must be a named list with non-empty names.")
+  if (is.null(names(Q_universe)) || any(names(Q_universe) == "")) {
+    stop("Q_universe must be a named list with non-empty names.")
+  }
+  if (anyDuplicated(names(Q_universe))) {
+    stop("Duplicate model names detected in Q_universe.")
+  }
   if (!all(sapply(Q_universe, is.numeric))) stop("Elements of Q_universe must be numeric vectors (indices).")
   if (!is.numeric(alpha) || alpha <= 0 || alpha >= 1) stop("alpha must be between 0 and 1.")
   if (!is.numeric(B) || B < 1) stop("B must be a positive integer.")
@@ -147,6 +105,9 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
   p_design <- ncol(X_design)
   design_colnames <- colnames(X_design)
   n <- nrow(X_design)
+  if (n < 10) {
+    warning("Sample size is very small (n < 10); results may be unstable.", call. = FALSE)
+  }
 
   if (add_intercept && "(Intercept)" %in% colnames(X)) {
     warning("Input matrix 'X' already contains a column named '(Intercept)' and 'add_intercept=TRUE'. Ensure this is intended.", call. = FALSE)
@@ -238,13 +199,17 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
   if (cores > 1) {
     if (verbose) message("Setting up parallel cluster...")
     cl <- parallel::makeCluster(cores)
-    on.exit(parallel::stopCluster(cl), add = TRUE)
+    on.exit({
+      if (!is.null(cl)) parallel::stopCluster(cl)
+    }, add = TRUE)  # << safer stopCluster only if cl exists
+
     if (!is.null(seed) && is.numeric(seed)) {
       parallel::clusterSetRNGStream(cl, seed)
     } else {
-      warning("No seed provided for parallel execution. Results may not be exactly reproducible.", call.=FALSE)
+      warning("No seed provided for parallel execution. Results may not be exactly reproducible.", call. = FALSE)
     }
-    parallel::clusterExport(cl, varlist=c("fit_model_q"), envir=environment(fit_model_q)) # Export helper function from its environment
+
+    parallel::clusterExport(cl, varlist = c("fit_model_q"), envir = environment(fit_model_q))
 
     if (pbapply_available && verbose) {
       bootstrap_results <- pbapply::pblapply(1:B, bootstrap_iteration,

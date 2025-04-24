@@ -1,23 +1,25 @@
 #' Fit OLS model using lm.fit (Internal Helper)
 #'
-#' A simple wrapper around lm.fit for efficiency within the bootstrap loop.
-#' Handles potential rank deficiency by returning NA for affected coefficients.
-#' Intended for internal use within the PosiR package.
+#' Lightweight and robust wrapper around `lm.fit()` for use in bootstrap procedures.
+#' Designed to handle possible rank-deficiency gracefully by returning NA-coefficients
+#' for linearly dependent terms. Primarily used internally within `simultaneous_ci()`.
 #'
-#' @param X_full Full design matrix (n x p_design), including intercept if added.
-#'               Assumed to have unique column names by the time it's used here.
-#' @param y Response vector (n).
-#' @param q_indices Vector of column indices (numeric) for the specific model q
-#'                  to be fitted, relative to `X_full`.
+#' @param X_full Numeric matrix. Full design matrix including intercept if present.
+#'        Column names must be unique. Typically derived from `X` + intercept inside `simultaneous_ci()`.
+#' @param y Numeric vector. Response variable, same length as `nrow(X_full)`.
+#' @param q_indices Integer vector. Column indices (1-based) specifying the submodel to fit.
 #'
-#' @return A named vector of coefficients corresponding to the columns specified
-#'         by `q_indices`. Coefficients for linearly dependent columns identified
-#'         by `lm.fit` will be `NA`. If `lm.fit` fails completely or loses coefficient
-#'         names, returns a vector of NAs with the expected names.
+#' @return Named numeric vector of estimated coefficients. If fitting fails or coefficients
+#'         are dropped due to collinearity, NA values are returned with expected names.
 #'
 #' @keywords internal
 #' @importFrom stats lm.fit setNames
 #'
+#' @examples
+#' X <- matrix(rnorm(50*3), 50, 3, dimnames = list(NULL, c("X1", "X2", "X3")))
+#' y <- 1 + X[,1] - 2*X[,2] + rnorm(50)
+#' fit_model_q(cbind(1, X), y, q_indices = 1:3)
+
 fit_model_q <- function(X_full, y, q_indices) {
 
   if (length(q_indices) == 0) {

@@ -1,58 +1,47 @@
 #' Plot Simultaneous Confidence Intervals
 #'
-#' Flexible plot method for objects returned by `simultaneous_ci`. Creates a
-#' dotchart showing point estimates and confidence intervals, with options for
-#' subsetting, scaling, rotation, and customization.
+#' Visualizes confidence intervals returned by `simultaneous_ci()` using base R graphics.
+#' Estimates are shown as points with corresponding CI segments, grouped and labeled by
+#' model and coefficient name. Supports customization for log scale, character sizes,
+#' label trimming, and reference lines.
 #'
-#' @details
-#' This function uses base R graphics. Layout, especially margin calculations
-#' for labels, relies on approximations (e.g., using standard character heights/widths)
-#' and may vary depending on the graphics device, device size, font, and specific
-#' characters used in labels (including non-ASCII characters). For complex layouts
-#' or guaranteed precision, consider using packages based on the 'grid' system
-#' (like ggplot2).
-#'
-#' Faceting is not supported by this method.
-#'
-#' @param x An object of class `simultaneous_ci_result`.
+#' @param x An object of class `simultaneous_ci_result`, typically returned by `simultaneous_ci()`.
 #' @param y Ignored.
-#' @param subset_pars Optional vector of coefficient names to include in the plot.
-#'                    If NULL (default), all coefficients are plotted.
-#' @param log.scale Logical. If TRUE, attempts to plot the estimates and intervals
-#'                  on a logarithmic scale. Intervals crossing zero or non-positive
-#'                  estimates/bounds will be omitted with a warning. Defaults to FALSE.
-#' @param cex Numeric character expansion factor for estimate points (must be positive).
-#'            Passed to `points`. Defaults to 0.8.
-#' @param cex.labels Numeric character expansion factor for y-axis labels (must be positive).
-#'                   Affects margin calculation. Defaults to 0.8.
-#' @param las.labels Numeric value for label orientation relative to the axis (must be 0, 1, 2, or 3).
-#'                   Passed to `Axis(side = 2, ...)`. Defaults to 1 (horizontal).
-#'                   Use 2 (perpendicular) for long labels that might overlap.
-#' @param pch Plotting character for estimate points. Passed to `points`.
-#' @param col.estimate Color for the estimate points.
-#' @param col.ci Color for the confidence interval segments.
-#' @param col.ref Color for the reference line(s).
-#' @param ref.line.pos Position(s) for vertical reference line(s). Defaults to 0.
-#'                     Set to NULL to disable. Non-positive values are ignored if `log.scale=TRUE`.
-#' @param lty.ref Line type for the reference line(s).
-#' @param main Plot title.
-#' @param xlab Label for the x-axis (estimates/intervals). If `log.scale=TRUE`,
-#'             "Log Estimate" is appended unless `xlab` is explicitly set to NA.
-#' @param label.trim Optional integer. If specified, trims labels longer than this
-#'                   value using `substr` and adds "...". Helps with very long labels.
-#' @param ... Additional arguments (currently ignored by this implementation but kept for S3 consistency).
+#' @param subset_pars Optional character vector. Coefficient names to subset the plot. Default: all.
+#' @param log.scale Logical. Plot on logarithmic scale. Intervals crossing 0 or with nonpositive bounds are excluded.
+#' @param cex Point size for estimates. Default = 0.8.
+#' @param cex.labels Label size for y-axis. Default = 0.8.
+#' @param las.labels Orientation of y-axis labels (0, 1, 2, or 3). Default = 1.
+#' @param pch Plot character for point estimates. Default = 16.
+#' @param col.estimate Color of point estimates. Default = "blue".
+#' @param col.ci Color of confidence interval lines. Default = "darkgray".
+#' @param col.ref Color of reference line(s). Default = "red".
+#' @param ref.line.pos Position(s) for vertical reference line(s). Default = 0. Set to NULL to omit.
+#' @param lty.ref Line type for reference lines. Default = 2 (dashed).
+#' @param main Plot title. Default = "Simultaneous Confidence Intervals".
+#' @param xlab X-axis label. If NULL and `log.scale = TRUE`, label defaults to "Log Estimate".
+#' @param label.trim Integer. Trims long coefficient labels to this width (adds "..."). Optional.
+#' @param ... Additional arguments passed for future use (currently ignored).
 #'
-#' @return Invisibly returns a list containing:
-#'   \item{ycoords}{A named numeric vector mapping labels to their y-axis coordinates.}
-#'   \item{xlim}{The calculated x-axis limits.}
-#'   \item{ylim}{The calculated y-axis limits.}
-#'   Returns `invisible(NULL)` if no plot is generated.
+#' @return Invisibly returns a list:
+#'
+#' - `ycoords`: Named vector of y-axis positions for each label
+#' - `xlim`: Range of x-axis limits used
+#' - `ylim`: Range of y-axis limits used
+#'
+#' If no valid intervals are available for plotting, returns `invisible(NULL)`.
 #'
 #' @method plot simultaneous_ci_result
 #' @export
 #' @importFrom graphics plot.new plot.window segments points Axis box title abline par strwidth grconvertX grconvertY
 #' @importFrom stats setNames
 #'
+#' @examples
+#' set.seed(1)
+#' X <- matrix(rnorm(100*2), 100, 2, dimnames = list(NULL, c("X1", "X2")))
+#' y <- 1 + X[,1] - X[,2] + rnorm(100)
+#' res <- simultaneous_ci(X, y, list(mod = 1:3), B = 100, add_intercept = TRUE)
+#' plot(res)
 plot.simultaneous_ci_result <- function(x, y = NULL, subset_pars = NULL,
                                         log.scale = FALSE,
                                         cex = 0.8, cex.labels = 0.8, las.labels = 1, pch = 16,
