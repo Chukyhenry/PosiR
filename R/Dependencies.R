@@ -34,3 +34,7 @@ usethis::use_test("simultaneous_ci")
 usethis::use_git_remote("origin", url = NULL, overwrite = TRUE)
 
 devtools::document()
+
+usethis::use_git()
+usethis::use_github()
+
