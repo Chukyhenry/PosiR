@@ -465,3 +465,4 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
   if (verbose) message("Done.")
   return(output)
 }
+

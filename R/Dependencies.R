@@ -34,7 +34,11 @@ usethis::use_test("simultaneous_ci")
 usethis::use_git_remote("origin", url = NULL, overwrite = TRUE)
 
 devtools::document()
+devtools::load_all()
 
 usethis::use_git()
 usethis::use_github()
 
+usethis::use_test()
+
+devtools::test()
