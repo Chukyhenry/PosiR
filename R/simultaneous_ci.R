@@ -2,10 +2,34 @@
 #'
 #' Implements Algorithm 1 from Kuchibhotla et al. (2022) via bootstrap
 #' for simultaneous confidence intervals over coefficients within a universe
-#' of linear models.
+#' of linear models. Supports parallel execution for the bootstrap loop.
+#'
+#' @details
+#' This function implements the bootstrap procedure described in Algorithm 1
+#' of Kuchibhotla et al. (2022) for simultaneous inference, primarily targeting
+#' coefficients in linear regression models fit using Ordinary Least Squares.
+#'
+#' The core computation involves repeated model fitting on bootstrap samples.
+#' Parallel processing is highly recommended for larger problems (set `cores > 1`).
+#'
+#' The calculation of the bootstrap variance estimate \eqn{\widehat{\Psi}_{n,q,j}} uses
+#' the formula \eqn{(n_{valid} - 1)^{-1} \sum_{b \in valid} [ \sqrt{n} ( \widehat{\theta}_{q,j}^{*b} - \widehat{\theta}_{q,j} ) ]^2},
+#' based on the valid bootstrap samples obtained.
+#'
+#' For constructing the final confidence intervals, bootstrap variance estimates
+#' (\eqn{\widehat{\Psi}_{n,q,j}}) smaller than an internal threshold (currently 1e-12)
+#' are treated as zero, resulting in a zero-width interval centered at the point
+#' estimate; a warning is issued in such cases.
+#'
+#' Memory usage can be substantial for a large number of bootstrap samples (`B`),
+#' many models in `Q_universe`, or models with many parameters, primarily due
+#' to storing intermediate bootstrap estimates.
+#'
+#' Note on `X`: For reliable coefficient mapping, the input design matrix `X`
+#' (and the intercept if `add_intercept=TRUE`) should have unique column names.
 #'
 #' @param X Design matrix (numeric matrix, n x p). Should not include an intercept column
-#'          if 'add_intercept = TRUE'. Column names are recommended.
+#'          if 'add_intercept = TRUE'. **Must have unique column names.**
 #' @param y Response vector (numeric vector, length n).
 #' @param Q_universe A list specifying the universe of models. Each element of the list
 #'                   should be a vector of column indices (from the design matrix
@@ -18,71 +42,71 @@
 #'                      of the design matrix. Defaults to TRUE.
 #' @param bootstrap_method Type of bootstrap. Currently only "pairs" (resampling rows of (X, y))
 #'                         is implemented.
+#' @param cores Number of CPU cores to use for parallel processing of bootstrap samples.
+#'              If `cores > 1`, requires the `parallel` package. Defaults to 1 (no parallelization).
+#'              Set to `parallel::detectCores()` or similar for maximum available cores.
 #' @param use_pbapply Logical. If TRUE and the `pbapply` package is installed, uses progress
-#'                    bars from `pbapply`. Otherwise, uses base R `txtProgressBar`. Defaults to TRUE.
+#'                    bars from `pbapply`, which also works with parallel execution.
+#'                    Otherwise, uses base R `txtProgressBar` (only for sequential execution).
+#'                    Defaults to TRUE.
+#' @param seed Optional seed for reproducibility, especially important for parallel computations.
+#'             If provided (`is.numeric`), it's used with `parallel::clusterSetRNGStream` or `set.seed`.
+#' @param verbose Logical. If TRUE (default), prints intermediate status messages. Set to FALSE
+#'                to suppress messages.
 #' @param ... Additional arguments (currently unused).
 #'
-#' @return A list containing:
-#'         - `intervals`: A data frame with columns `model_id`, `coefficient_name`,
-#'                      `estimate` (\( \widehat{\theta}_{q,j} \)), `lower`, `upper`,
-#'                      `psi_hat_nqj` (\( \widehat{\Psi}_{n,q,j} \)), `se_nqj` (\( \sqrt{\widehat{\Psi}_{n,q,j}/n} \)).
-#'         - `K_alpha`: The computed \( (1-\alpha) \) quantile (\( \widehat{K}_{\alpha} \)) of the max-t statistics.
+#' @return A list object of class `simultaneous_ci_result` containing:
+#'         - `intervals`: Data frame with results (estimates, CIs, variance estimates).
+#'         - `K_alpha`: Computed (1-alpha) quantile of the max-t statistics.
 #'         - `alpha`: Significance level used.
-#'         - `B`: Number of bootstrap samples used.
-#'         - `n_valid_T_star_b`: Number of bootstrap samples yielding a finite \( T^{*b} \) value.
+#'         - `B`: Number of bootstrap samples requested.
+#'         - `n_valid_T_star_b`: Number of finite \( T^{*b} \) values obtained.
 #'         - `T_star_b`: Vector of the B bootstrap max-t statistics (may contain NAs).
 #'         - `bootstrap_method`: Bootstrap method used.
-#'         - `warnings`: A list of warnings generated during model fitting or calculations.
-#'         - `valid_bootstrap_counts`: A nested list showing the number of valid bootstrap
-#'                                     estimates used for each \( \widehat{\Psi}_{n,q,j} \).
+#'         - `warnings_list`: List containing warnings generated during execution (each item has `context` and `message`).
+#'         - `valid_bootstrap_counts`: Counts of valid bootstrap samples used per parameter variance estimate.
+#'         - `n_bootstrap_errors`: Count of bootstrap iterations encountering errors during model fitting.
+#'
+#' @references
+#' Arun K Kuchibhotla, John E Kolassa, and Todd A Kuffner.
+#' Post-selection inference.
+#' Annual Review of Statistics and Its Application, 9(1):505–527, 2022.
 #'
 #' @export
-#' @importFrom stats lm.fit quantile setNames sd var qnorm # Added var, qnorm
+#' @importFrom stats lm.fit quantile setNames sd var qnorm
 #' @importFrom utils txtProgressBar setTxtProgressBar
-#' @suggests pbapply # Added suggests tag for optional dependency
+#' @import parallel
+#' @suggests pbapply
 #'
 #' @examples
 #' \dontrun{
-#' # Install pbapply for better progress bars: install.packages("pbapply")
-#'
 #' set.seed(123)
 #' n <- 100
-#' p <- 4 # Number of non-intercept predictors
-#' X <- matrix(rnorm(n * p), n, p)
-#' colnames(X) <- paste0("X", 1:p)
-#' beta_true <- c(1, 0.5, 0, -0.5, 0) # Intercept, X1, X2, X3, X4
-#' X_design_true <- cbind(1, X)
-#' colnames(X_design_true) <- c("(Intercept)", colnames(X))
+#' p <- 4
+#' X <- matrix(rnorm(n * p), n, p, dimnames=list(NULL, paste0("X",1:p)))
+#' beta_true <- c(1, 0.5, 0, -0.5, 0)
+#' X_design_true <- cbind(1, X); colnames(X_design_true)[1] <- "(Intercept)"
 #' y <- X_design_true %*% beta_true + rnorm(n, sd = 1.5)
 #'
-#' # Define universe of models (using indices including intercept)
-#' Q_models <- list(
-#'   m_int_x1 = 1:2,          # Intercept + X1
-#'   m_int_x1_x3 = c(1, 2, 4), # Intercept + X1 + X3
-#'   m_all = 1:(p+1)          # Intercept + X1:X4
-#' )
+#' Q_models <- list( m1=1:2, m2=c(1,2,4), mall=1:5 )
 #'
-#' # Run with B=100 for speed; use B=1000+ for actual analysis
-#' # Use pbapply if installed (default), otherwise falls back to txtProgressBar
-#' results <- simultaneous_ci(X, y, Q_universe = Q_models, alpha = 0.05, B = 100)
-#' print(paste("K_alpha:", round(results$K_alpha, 3)))
-#' print(results$intervals)
+#' # Sequential, verbose (default)
+#' results_seq <- simultaneous_ci(X, y, Q_models, B = 100, cores = 1)
 #'
-#' # Compare with unadjusted intervals (using same Psi_hat)
-#' z_alpha_2 <- stats::qnorm(1 - 0.05 / 2) # Use stats::qnorm explicitly if needed
-#' unadj_intervals <- results$intervals
-#' unadj_intervals$lower <- results$intervals$estimate - z_alpha_2 * results$intervals$se_nqj
-#' unadj_intervals$upper <- results$intervals$estimate + z_alpha_2 * results$intervals$se_nqj
-#' print("Unadjusted Intervals (for comparison):")
-#' print(unadj_intervals[, c("model_id", "coefficient_name", "lower", "upper")])
+#' # Parallel, quiet, set seed
+#' results_par <- simultaneous_ci(X, y, Q_models, B = 100, cores = 2, seed = 42, verbose = FALSE)
+#' print(results_par$K_alpha)
+#' plot(results_par)
 #' }
 simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
                             add_intercept = TRUE, bootstrap_method = "pairs",
-                            use_pbapply = TRUE, ...) {
+                            cores = 1, use_pbapply = TRUE, seed = NULL, verbose = TRUE, ...) {
 
   # --- Input Validation ---
-  # (Keep existing validation checks for X, y, Q_universe, alpha, B, bootstrap_method)
   if (!is.matrix(X) || !is.numeric(X)) stop("X must be a numeric matrix.")
+  if (is.null(colnames(X)) || anyDuplicated(colnames(X))) {
+    stop("Input matrix 'X' must have unique column names.")
+  }
   if (!is.vector(y) || !is.numeric(y)) stop("y must be a numeric vector.")
   n <- nrow(X)
   p_orig <- ncol(X)
@@ -94,31 +118,42 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
   if (!is.numeric(B) || B < 1) stop("B must be a positive integer.")
   if (B < 50) warning("Number of bootstrap samples B is small (< 50), results may be unstable.")
   if (bootstrap_method != "pairs") stop("Currently only 'pairs' bootstrap is supported.")
+  if (!is.logical(verbose) || length(verbose) != 1) stop("verbose must be TRUE or FALSE.")
 
-  # Check for pbapply if requested
+  if (!is.numeric(cores) || cores < 1) stop("cores must be a positive integer.")
+  cores <- as.integer(cores)
+  available_cores <- parallel::detectCores()
+  if (cores > available_cores) {
+    warning(paste("cores requested (", cores, ") exceeds available cores (", available_cores, "). Using ", available_cores, " cores.", sep=""), call. = FALSE)
+    cores <- available_cores
+  }
+
   pbapply_available <- FALSE
   if (use_pbapply) {
     if (requireNamespace("pbapply", quietly = TRUE)) {
       pbapply_available <- TRUE
     } else {
-      warning("`pbapply` package not found and `use_pbapply=TRUE`. Using base R `txtProgressBar` instead.", call. = FALSE)
+      if (verbose) warning("`pbapply` package not found and `use_pbapply=TRUE`. Progress bars disabled for parallel or using base R for sequential.", call. = FALSE)
     }
   }
 
   # --- Preprocessing ---
-  # (Keep existing preprocessing for X_design, colnames, Q_universe_named)
   if (add_intercept) {
     X_design <- cbind(1, X)
-    current_colnames <- if (is.null(colnames(X))) paste0("V", 1:p_orig) else colnames(X)
-    colnames(X_design) <- c("(Intercept)", current_colnames)
+    colnames(X_design) <- c("(Intercept)", colnames(X))
   } else {
     X_design <- X
-    if (is.null(colnames(X))) {
-      colnames(X_design) <- paste0("V", 1:p_orig)
-    }
   }
   p_design <- ncol(X_design)
   design_colnames <- colnames(X_design)
+  n <- nrow(X_design)
+
+  if (add_intercept && "(Intercept)" %in% colnames(X)) {
+    warning("Input matrix 'X' already contains a column named '(Intercept)' and 'add_intercept=TRUE'. Ensure this is intended.", call. = FALSE)
+  }
+  if (anyDuplicated(design_colnames)) {
+    stop("Internal Error: Column names in design matrix (X_design) are not unique after adding intercept. Check input 'X' names.")
+  }
 
   Q_universe_named <- list()
   for (q_name in names(Q_universe)) {
@@ -134,175 +169,211 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
   }
 
   # --- Store Warnings ---
-  fit_warnings <- list()
-  record_warning <- function(w, context) {
-    # Avoid recording the same warning repeatedly in loops if identical
-    msg <- paste(context, w$message)
-    if (!any(sapply(fit_warnings, function(x) x$full_message == msg))) {
-      key <- paste(context, length(fit_warnings) + 1)
-      fit_warnings[[key]] <<- list(message = w$message, context = context, full_message = msg)
-    }
+  warnings_list <- list()
+  add_warning <- function(msg, context = "", call = FALSE) {
+    warnings_list[[length(warnings_list) + 1]] <<- list(
+      context = context,
+      message = msg
+    )
+    warning(paste0("[", context, "] ", msg), call. = call)
   }
 
   # --- Original Estimates ---
   original_estimates <- list()
-  message("Fitting models on original data...")
-  # Progress bar setup
-  if (pbapply_available) {
-    pb_orig <- pbapply::pboptions(type = "timer") # Use timer style
-    on.exit(pbapply::pboptions(pb_orig), add = TRUE) # Restore options on exit
-    iter_orig <- pbapply::pblapply(names(Q_universe_named), function(q_name) q_name) # Use pblapply for iteration tracking
-  } else {
-    pb_orig <- utils::txtProgressBar(min = 0, max = length(Q_universe_named), style = 3)
-    iter_orig <- names(Q_universe_named)
-  }
-
-  for (i in seq_along(iter_orig)) {
-    q_name <- iter_orig[[i]] # Get name regardless of iterator type
+  if (verbose) message("Fitting models on original data...")
+  for (q_name in names(Q_universe_named)) {
     q_col_names <- Q_universe_named[[q_name]]
     q_indices <- match(q_col_names, design_colnames)
-
     tryCatch({
       withCallingHandlers({
-        # Assumes fit_model_q is available (moved to utils.R)
         coeffs <- fit_model_q(X_design, y, q_indices)
         original_estimates[[q_name]] <- stats::setNames(coeffs[q_col_names], q_col_names)
       }, warning = function(w) {
-        record_warning(w, paste("Original fit:", q_name))
+        add_warning(w$message, paste("Original fit:", q_name))
         invokeRestart("muffleWarning")
       })
     }, error = function(e) {
       stop(paste("Error fitting model '", q_name, "' on original data: ", e$message, sep = ""))
     })
-    if (!pbapply_available) utils::setTxtProgressBar(pb_orig, i)
   }
-  if (!pbapply_available) close(pb_orig)
-  if (pbapply_available) pbapply::pblapply(1, function(x) NULL) # Finalize pbapply bar if needed
 
   # --- Bootstrap Loop ---
-  # (Keep est_storage initialization)
+  sqrt_n <- sqrt(n)
+  if (verbose) message(paste("Running", B, "bootstrap samples", ifelse(cores > 1, paste("on", cores, "cores"), ""), "..."))
+
+  bootstrap_iteration <- function(b_index, .X_design, .y, .n, .Q_universe_named, .design_colnames) {
+    iter_results <- list(estimates = list(), error_occurred = FALSE, warnings = list())
+    local_warnings <- list()
+    local_add_warning <- function(msg, context){
+      local_warnings[[length(local_warnings) + 1]] <<- list(message=msg, context=context)
+    }
+    tryCatch({
+      indices_b <- sample(1:.n, size = .n, replace = TRUE)
+      X_b <- .X_design[indices_b, , drop = FALSE]
+      y_b <- .y[indices_b]
+      iter_estimates <- list()
+      for (q_name in names(.Q_universe_named)) {
+        q_col_names <- .Q_universe_named[[q_name]]
+        q_indices <- match(q_col_names, .design_colnames)
+        withCallingHandlers({
+          coeffs_b <- fit_model_q(X_b, y_b, q_indices)
+          iter_estimates[[q_name]] <- stats::setNames(coeffs_b[q_col_names], q_col_names)
+        }, warning = function(w) {
+          local_add_warning(w$message, paste("Bootstrap fit:", q_name, "sample", b_index))
+          invokeRestart("muffleWarning")
+        })
+      }
+      iter_results$estimates <- iter_estimates
+    }, error = function(e) {
+      iter_results$error_occurred <- TRUE
+      local_add_warning(e$message, paste("Bootstrap fit error sample", b_index))
+    })
+    iter_results$warnings <- local_warnings
+    return(iter_results)
+  }
+
+  bootstrap_results <- list()
+  cl <- NULL
+
+  if (cores > 1) {
+    if (verbose) message("Setting up parallel cluster...")
+    cl <- parallel::makeCluster(cores)
+    on.exit(parallel::stopCluster(cl), add = TRUE)
+    if (!is.null(seed) && is.numeric(seed)) {
+      parallel::clusterSetRNGStream(cl, seed)
+    } else {
+      warning("No seed provided for parallel execution. Results may not be exactly reproducible.", call.=FALSE)
+    }
+    parallel::clusterExport(cl, varlist=c("fit_model_q"), envir=environment(fit_model_q)) # Export helper function from its environment
+
+    if (pbapply_available && verbose) {
+      bootstrap_results <- pbapply::pblapply(1:B, bootstrap_iteration,
+                                             .X_design=X_design, .y=y, .n=n,
+                                             .Q_universe_named=Q_universe_named,
+                                             .design_colnames=design_colnames, cl=cl)
+    } else {
+      bootstrap_results <- parallel::parLapply(cl, 1:B, bootstrap_iteration,
+                                               .X_design=X_design, .y=y, .n=n,
+                                               .Q_universe_named=Q_universe_named,
+                                               .design_colnames=design_colnames)
+    }
+    parallel::stopCluster(cl); cl <- NULL
+
+  } else {
+    if (!is.null(seed) && is.numeric(seed)) { set.seed(seed) }
+    if (pbapply_available && verbose) {
+      bootstrap_results <- pbapply::pblapply(1:B, bootstrap_iteration,
+                                             .X_design=X_design, .y=y, .n=n,
+                                             .Q_universe_named=Q_universe_named,
+                                             .design_colnames=design_colnames)
+    } else {
+      pb_boot <- NULL
+      if (verbose) pb_boot <- utils::txtProgressBar(min = 0, max = B, style = 3)
+      results_temp <- vector("list", B)
+      for(b in 1:B){
+        results_temp[[b]] <- bootstrap_iteration(b, .X_design=X_design, .y=y, .n=n,
+                                                 .Q_universe_named=Q_universe_named,
+                                                 .design_colnames=design_colnames)
+        if (verbose && !is.null(pb_boot)) utils::setTxtProgressBar(pb_boot, b)
+      }
+      if (verbose && !is.null(pb_boot)) close(pb_boot)
+      bootstrap_results <- results_temp
+    }
+  }
+
+  # --- Process Bootstrap Results ---
+  if (verbose) message("Processing bootstrap results...")
+  total_bootstrap_errors <- 0
+  for (res in bootstrap_results) {
+    if (res$error_occurred) total_bootstrap_errors <- total_bootstrap_errors + 1
+    for(w in res$warnings){
+      add_warning(w$message, w$context)
+    }
+  }
+  if (total_bootstrap_errors > 0) {
+    add_warning(paste(total_bootstrap_errors, "out of", B, "bootstrap iterations encountered an error during model fitting."), "Bootstrap Summary")
+  }
+
   est_storage <- list()
   for(q_name in names(Q_universe_named)){
     est_storage[[q_name]] <- list()
     if(!is.null(original_estimates[[q_name]])){
       for(coeff_name in names(original_estimates[[q_name]])){
-        est_storage[[q_name]][[coeff_name]] <- numeric(B)
+        est_storage[[q_name]][[coeff_name]] <- rep(NA_real_, B)
+      }
+    }
+  }
+  for (b in 1:B) {
+    iter_estimates <- bootstrap_results[[b]]$estimates
+    if (bootstrap_results[[b]]$error_occurred || is.null(iter_estimates)) next
+    for (q_name in names(iter_estimates)) {
+      if (!is.null(est_storage[[q_name]])){
+        q_iter_coeffs <- iter_estimates[[q_name]]
+        for (coeff_name in names(q_iter_coeffs)) {
+          if (!is.null(est_storage[[q_name]][[coeff_name]])){
+            est_b <- q_iter_coeffs[[coeff_name]]
+            est_storage[[q_name]][[coeff_name]][b] <- ifelse(is.finite(est_b), est_b, NA_real_)
+          }
+        }
       }
     }
   }
 
-  sqrt_n <- sqrt(n)
-  message(paste("Running", B, "bootstrap samples..."))
-  # Progress bar setup for bootstrap loop (manual update)
-  if (pbapply_available) {
-    pb_boot <- pbapply::startpb(0, B)
-    on.exit(pbapply::closepb(pb_boot), add = TRUE)
-  } else {
-    pb_boot <- utils::txtProgressBar(min = 0, max = B, style = 3)
-  }
-
-  for (b in 1:B) {
-    # 1. Generate bootstrap sample
-    indices_b <- sample(1:n, size = n, replace = TRUE)
-    X_b <- X_design[indices_b, , drop = FALSE]
-    y_b <- y[indices_b]
-
-    # 2. Compute bootstrap estimators
-    for (q_name in names(Q_universe_named)) {
-      q_col_names <- Q_universe_named[[q_name]]
-      q_indices <- match(q_col_names, design_colnames)
-
-      tryCatch({
-        withCallingHandlers({
-          # Assumes fit_model_q is available
-          coeffs_b <- fit_model_q(X_b, y_b, q_indices)
-          orig_coeff_names <- names(original_estimates[[q_name]])
-          if(!is.null(orig_coeff_names)){
-            for(coeff_name in orig_coeff_names) {
-              est_b <- coeffs_b[coeff_name]
-              est_storage[[q_name]][[coeff_name]][b] <- ifelse(is.finite(est_b), est_b, NA_real_)
-            }
-          }
-        }, warning = function(w) {
-          record_warning(w, paste("Bootstrap fit:", q_name, "sample", b))
-          invokeRestart("muffleWarning")
-        })
-      }, error = function(e) {
-        warning(paste("Error fitting model '", q_name, "' in bootstrap sample ", b, ": ", e$message, ". Storing NAs.", sep = ""), call. = FALSE)
-        orig_coeff_names <- names(original_estimates[[q_name]])
-        if(!is.null(orig_coeff_names)){
-          for(coeff_name in orig_coeff_names) {
-            est_storage[[q_name]][[coeff_name]][b] <- NA_real_
-          }
-        }
-      })
-    } # End loop over q
-    # Update progress bar
-    if (pbapply_available) pbapply::setpb(pb_boot, b) else utils::setTxtProgressBar(pb_boot, b)
-  } # End bootstrap loop (b)
-  if (!pbapply_available) close(pb_boot)
-
   # --- Calculate Psi_hat_nqj ---
-  message("Calculating bootstrap variance estimates (Psi_hat_nqj)...")
+  if (verbose) message("Calculating bootstrap variance estimates (Psi_hat_nqj)...")
   psi_hat_nqj <- list()
   valid_bs_counts <- list()
-
   for (q_name in names(Q_universe_named)) {
     psi_hat_nqj[[q_name]] <- list()
     valid_bs_counts[[q_name]] <- list()
     q_coeffs_orig <- original_estimates[[q_name]]
     if(is.null(q_coeffs_orig)) next
-
     for(coeff_name in names(q_coeffs_orig)) {
       theta_qj <- q_coeffs_orig[[coeff_name]]
+      if(is.null(est_storage[[q_name]]) || is.null(est_storage[[q_name]][[coeff_name]])){
+        psi_hat_nqj[[q_name]][[coeff_name]] <- NA_real_
+        valid_bs_counts[[q_name]][[coeff_name]] <- 0
+        next
+      }
       theta_qj_star_b <- est_storage[[q_name]][[coeff_name]]
-
       valid_indices <- is.finite(theta_qj_star_b) & is.finite(theta_qj)
       n_valid_bs <- sum(valid_indices)
       valid_bs_counts[[q_name]][[coeff_name]] <- n_valid_bs
-
       if (n_valid_bs >= 2) {
-        # *** FIX 1: Correct variance calculation ***
-        # Calculate sum of squares of diffs, divide by (n_valid - 1)
-        # No centering by mean(diffs) needed, as per Algorithm 1 structure.
         diffs <- sqrt_n * (theta_qj_star_b[valid_indices] - theta_qj)
         psi_hat_nqj[[q_name]][[coeff_name]] <- sum(diffs^2) / (n_valid_bs - 1)
       } else {
         psi_hat_nqj[[q_name]][[coeff_name]] <- NA_real_
-        warning(paste("Could not estimate Psi_hat for '", coeff_name, "' in model '", q_name,
-                      "' due to insufficient valid bootstrap samples (", n_valid_bs, ").", sep=""), call. = FALSE)
+        if(is.finite(theta_qj)){
+          add_warning(paste("Could not estimate Psi_hat for '", coeff_name, "' in model '", q_name,
+                            "' due to insufficient valid bootstrap samples (", n_valid_bs, ").", sep=""), "Psi Calculation")
+        }
       }
     }
   }
 
   # --- Compute T*b and K_alpha ---
-  message("Calculating bootstrap max-t statistics (T_star_b)...")
+  if (verbose) message("Calculating bootstrap max-t statistics (T_star_b)...")
   T_star_b <- numeric(B)
-
-  # Progress bar setup
-  if (pbapply_available) {
-    pb_T <- pbapply::startpb(0, B)
-    on.exit(pbapply::closepb(pb_T), add = TRUE)
-  } else {
-    pb_T <- utils::txtProgressBar(min = 0, max = B, style = 3)
-  }
-
+  psi_t_stat_threshold <- 1e-8
   for(b in 1:B) {
     max_t_stat_b <- -Inf
-
-    for(q_name in names(Q_universe_named)) {
+    if (bootstrap_results[[b]]$error_occurred) {
+      T_star_b[b] <- NA_real_
+      next
+    }
+    iter_estimates <- bootstrap_results[[b]]$estimates
+    for(q_name in names(iter_estimates)) {
       q_coeffs_orig <- original_estimates[[q_name]]
       if(is.null(q_coeffs_orig)) next
-
-      for(coeff_name in names(q_coeffs_orig)) {
+      q_iter_coeffs <- iter_estimates[[q_name]]
+      for(coeff_name in names(q_iter_coeffs)) {
+        if(is.null(q_coeffs_orig[[coeff_name]]) || is.null(psi_hat_nqj[[q_name]][[coeff_name]])) next
         theta_qj <- q_coeffs_orig[[coeff_name]]
-        theta_qj_star_b <- est_storage[[q_name]][[coeff_name]][b]
+        theta_qj_star_b <- q_iter_coeffs[[coeff_name]]
         psi_hat <- psi_hat_nqj[[q_name]][[coeff_name]]
-
-        # *** FIX 5: Stricter threshold for T*b stability ***
-        # Check if all values needed are finite and psi_hat is sufficiently > 0
         if (is.finite(theta_qj) && is.finite(theta_qj_star_b) &&
-            is.finite(psi_hat) && psi_hat > 1e-8) { # Stricter threshold
+            is.finite(psi_hat) && psi_hat > psi_t_stat_threshold) {
           t_stat_qjb <- abs(sqrt_n * (psi_hat^(-0.5)) * (theta_qj_star_b - theta_qj))
           if (is.finite(t_stat_qjb) && t_stat_qjb > max_t_stat_b) {
             max_t_stat_b <- t_stat_qjb
@@ -311,63 +382,52 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
       }
     }
     T_star_b[b] <- ifelse(is.finite(max_t_stat_b), max_t_stat_b, NA_real_)
-    # Update progress bar
-    if (pbapply_available) pbapply::setpb(pb_T, b) else utils::setTxtProgressBar(pb_T, b)
-  } # End loop for T*b
-  if (!pbapply_available) close(pb_T)
+  }
 
-  # (Keep validation checks for T_star_b and K_alpha calculation)
   valid_T_star_b <- T_star_b[is.finite(T_star_b)]
   n_valid_T_star_b <- length(valid_T_star_b)
-
   if (n_valid_T_star_b == 0) {
     stop("Could not compute any valid bootstrap T* statistics. Cannot determine K_alpha. Check model fits and variance estimates.")
   }
-  if (n_valid_T_star_b < B * 0.5) {
-    warning(paste("More than 50% of bootstrap T* statistics were non-finite (", B - n_valid_T_star_b, " / ", B,"). ",
-                  "Results may be unreliable. Check model fits, variance estimates, and potential collinearity.", sep=""), call. = FALSE)
+  n_nonfinite_T <- B - n_valid_T_star_b
+  if (n_nonfinite_T > 0) {
+    add_warning(paste(n_nonfinite_T, "out of", B, "bootstrap T* statistics were non-finite.",
+                      "This might be due to fitting errors or near-zero variance estimates.",
+                      ifelse(n_nonfinite_T > B * 0.5, " Results may be unreliable.", "")), "T*b Calculation")
   }
-
   K_alpha <- stats::quantile(valid_T_star_b, probs = (1 - alpha), type = 8, na.rm = TRUE)
 
-
   # --- Construct Confidence Intervals ---
-  message("Constructing confidence intervals...")
+  if (verbose) message("Constructing confidence intervals...")
   results_list <- list()
   idx <- 1
-  psi_threshold <- 1e-12 # Threshold for considering psi_hat as zero for CI construction
-
+  psi_ci_threshold <- 1e-12
   for (q_name in names(Q_universe_named)) {
     q_coeffs_orig <- original_estimates[[q_name]]
     if(is.null(q_coeffs_orig)) next
-
     for(coeff_name in names(q_coeffs_orig)) {
       theta_qj <- q_coeffs_orig[[coeff_name]]
       psi_hat <- psi_hat_nqj[[q_name]][[coeff_name]]
-
       lower <- NA_real_
       upper <- NA_real_
       se_nqj <- NA_real_
-
       if (is.finite(theta_qj) && is.finite(psi_hat) && psi_hat >= 0) {
-        # *** FIX 3: Add warning for near-zero psi_hat ***
-        if (psi_hat > psi_threshold) {
+        if (psi_hat > psi_ci_threshold) {
           se_nqj <- sqrt(psi_hat / n)
           margin <- K_alpha * se_nqj
           lower <- theta_qj - margin
           upper <- theta_qj + margin
         } else {
-          # Psi_hat is near zero, collapse interval to point estimate
           lower <- theta_qj
           upper <- theta_qj
           se_nqj <- 0
-          warning(paste("Psi_hat for '", coeff_name, "' in model '", q_name,
-                        "' is near zero (", format(psi_hat, digits=3, scientific=TRUE), # Format for clarity
-                        "). Interval set to point estimate.", sep = ""),
-                  call. = FALSE)
+          if(is.finite(theta_qj)){
+            add_warning(paste("Psi_hat for '", coeff_name, "' in model '", q_name,
+                              "' is near zero (", format(psi_hat, digits=3, scientific=TRUE),
+                              "). Interval set to point estimate.", sep = ""), "CI Construction")
+          }
         }
       }
-
       results_list[[idx]] <- data.frame(
         model_id = q_name,
         coefficient_name = coeff_name,
@@ -382,14 +442,12 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
     }
   }
   intervals_df <- do.call(rbind, results_list)
-  # Order results for consistency
   if (nrow(intervals_df) > 0) {
     intervals_df <- intervals_df[order(intervals_df$model_id, intervals_df$coefficient_name), ]
   }
   rownames(intervals_df) <- NULL
 
   # --- Output ---
-  # (Keep existing output structure)
   output <- list(
     intervals = intervals_df,
     K_alpha = as.numeric(K_alpha),
@@ -398,12 +456,12 @@ simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
     n_valid_T_star_b = n_valid_T_star_b,
     T_star_b = T_star_b,
     bootstrap_method = bootstrap_method,
-    warnings = fit_warnings, # Note: This now captures warnings from fits and near-zero psi
-    valid_bootstrap_counts = valid_bs_counts
+    warnings_list = warnings_list,
+    valid_bootstrap_counts = valid_bs_counts,
+    n_bootstrap_errors = total_bootstrap_errors
   )
-
   class(output) <- c("simultaneous_ci_result", "list")
 
-  message("Done.")
+  if (verbose) message("Done.")
   return(output)
 }

@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# PosiR Package
+# PosiR
 
 <!-- badges: start -->
 <!-- badges: end -->
@@ -10,10 +10,12 @@ The goal of PosiR is to …
 
 ## Installation
 
-You can install the development version of PosiR like so:
+You can install the development version of PosiR from
+[GitHub](https://github.com/) with:
 
 ``` r
-# FILL THIS IN! HOW CAN PEOPLE INSTALL YOUR DEV PACKAGE?
+# install.packages("pak")
+pak::pak("Chukyhenry/PosiR")
 ```
 
 ## Example
@@ -21,6 +23,7 @@ You can install the development version of PosiR like so:
 This is a basic example which shows you how to solve a common problem:
 
 ``` r
+
 ## basic example code
 ```
 
