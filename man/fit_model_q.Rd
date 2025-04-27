@@ -23,9 +23,4 @@ Lightweight and robust wrapper around \code{lm.fit()} for use in bootstrap proce
 Designed to handle possible rank-deficiency gracefully by returning NA-coefficients
 for linearly dependent terms. Primarily used internally within \code{simultaneous_ci()}.
 }
-\examples{
-X <- matrix(rnorm(50*3), 50, 3, dimnames = list(NULL, c("X1", "X2", "X3")))
-y <- 1 + X[,1] - 2*X[,2] + rnorm(50)
-fit_model_q(cbind(1, X), y, q_indices = 1:3)
-}
 \keyword{internal}

@@ -1,14 +1,14 @@
 Package: PosiR
 Type: Package
 Title: Post-Selection Inference via Simultaneous Confidence Intervals
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: c(
     person("Henry", "Chukwuma",
            email = "chukyhenry55@gmail.com",
            role = c("aut", "cre")))
-Description: Provides tools for post-selection inference (PoSI) in linear regression models,
+Description: Provides tools for post-selection inference in linear regression models,
     constructing simultaneous confidence intervals across a user-specified universe of models.
-    Implements the methodology from Kuchibhotla et al. (2022) to ensure valid inference after model
+    Implements the methodology from the reference paper to ensure valid inference after model
     selection, with applications in high-dimensional settings like Lasso selection.
 License: MIT + file LICENSE
 Encoding: UTF-8
@@ -17,7 +17,8 @@ Suggests:
     pbapply,
     rmarkdown,
     testthat (>= 3.0.0),
-    dplyr
+    dplyr,
+    glmnet
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
@@ -25,7 +26,6 @@ URL: https://github.com/Chukyhenry/PosiR
 BugReports: https://github.com/Chukyhenry/PosiR/issues
 Imports: 
     graphics,
-    MASS,
     parallel,
     stats
 VignetteBuilder: knitr

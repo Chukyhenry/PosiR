@@ -1,11 +1,12 @@
 ---
-title: "Introduction to PosiR"
+title: "Vignette"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Vignette}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 bibliography: references.bib
+biblio-style: "apalike"
 ---
 
 ```{r, include = FALSE}
@@ -19,7 +20,7 @@ knitr::opts_chunk$set(
 
 Statistical inference after model selection is challenging because standard methods often ignore the selection process, leading to biased results like confidence intervals with lower-than-nominal coverage. This issue, known as post-selection inference (PoSI), is addressed by the `PosiR` package, which implements the methodology from @kuchibhotla2022. `PosiR` constructs confidence intervals that are simultaneously valid across a pre-defined universe of models, ensuring the desired coverage probability (e.g., 95%) regardless of the model selection process.
 
-This vignette introduces PoSI concepts, lists the package functions, explains the methodology, and provides examples.
+This vignette introduces Post-Selection Inference concepts, lists the package functions, explains the methodology, and provides examples.
 
 ## Package Functions
 The PosiR package provides two core functions:
@@ -157,7 +158,7 @@ y <- 0.5 * X[, "Age"] + rnorm(200)  # the true intercept is 0, the true coeffici
 
 #### Define the model universe:
 
-We specify a universe $𝒬$ containing two potential models: one with only Age and one with both Age and Income. The indices refer to the columns in X. Note that `simultaneous_ci` adds an intercept by default (add_intercept = TRUE), which will also be included in the inference.
+We specify a universe $𝒬$ containing two potential models: one with only Age and one with both Age and Income. The indices refer to the columns in X. Note that `simultaneous_ci` adds an intercept by default (`add_intercept = TRUE`), which will also be included in the inference.
 ```{r}
 Q <- list(
   Age_only = 1,              # Model with Intercept + Age
@@ -168,7 +169,8 @@ Q <- list(
 
 #### Run simultaneous_ci():
 
-We call the function, providing the data X, y, and the model universe Q. We use B=1000 bootstrap samples for reasonably stable results, cores=2 to speed up computation via parallel processing (adjust based on your machine), and seed for reproducibility. verbose=FALSE suppresses progress messages.
+We call the function, providing the data X, y, and the model universe `Q`. We use `B=1000` bootstrap samples for reasonably stable results, `cores=2` to speed up computation via parallel processing (adjust based on your machine), and seed for reproducibility. `verbose=FALSE` suppresses progress messages.
+
 ```{r warning=FALSE, message=FALSE}
 result <- simultaneous_ci(X, y, Q, B = 1000, cores = 2, verbose = FALSE)
 ```
@@ -203,7 +205,7 @@ The columns of the resulting `intervals` data frame are:
 
 #### Visualize Intervals
 
-We use the S3 plot method for `simultaneous_ci_result` objects. las.labels=2 rotates labels for readability.
+We use the S3 plot method for `simultaneous_ci_result` objects. `las.labels=2` rotates labels for readability.
 ```{r}
 plot(result, las.labels = 2, col.ci = "darkblue", main = "Simultaneous Confidence Intervals")
 ```
@@ -314,6 +316,12 @@ y_lasso <- drop(true_intercept + X_lasso %*% beta_true + rnorm(n_lasso))
 We use `glmnet` to perform Lasso regression and identify variables selected using cross-validation (lambda.min).
 ```{r}
 # This chunk only runs if glmnet is installed
+if (requireNamespace("glmnet", quietly = TRUE)) {
+  library(glmnet)
+  # Code using glmnet
+} else {
+  message("glmnet is not available. Skipping this example.")
+}
 library(glmnet)
 
 # Use cv.glmnet to find optimal lambda

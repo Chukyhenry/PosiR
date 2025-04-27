@@ -6,3 +6,5 @@
 ^\.github$
 ^man/figures/
 ^tests/testthat/_snaps/
+^LICENSE\.md$
+^cran-comments\.md$

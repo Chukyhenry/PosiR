@@ -1,17 +1,16 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# PosiR <img src="man/figures/logo.png" align="right" height="140"/>
-
 [![R-CMD-check](https://github.com/Chukyhenry/PosiR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Chukyhenry/PosiR/actions)
 
 **PosiR** provides tools for post-selection inference (PoSI) in linear
-regression models. PoSI addresses the challenge of performing valid
-statistical inference after model selection, ensuring that confidence
-intervals maintain their nominal coverage probability (e.g., 95%) even
-when the model is chosen based on the data. The package implements
-simultaneous confidence intervals using bootstrap-based max-t
-statistics, following Algorithm 1 from Kuchibhotla et al. (2022).
+regression models. Post-Selection Inference addresses the challenge of
+performing valid statistical inference after model selection, ensuring
+that confidence intervals maintain their nominal coverage probability
+(e.g., 95%) even when the model is chosen based on the data. The package
+implements simultaneous confidence intervals using bootstrap-based max-t
+statistics, following Algorithm 1 from Kuchibhotla, Kolassa, and Kuffner
+(2022).
 
 ## Installation
 

@@ -61,7 +61,7 @@ A list of class \code{simultaneous_ci_result} with elements:
 }
 }
 \description{
-Implements Algorithm 1 from Kuchibhotla et al. (2022) using bootstrap-based max-t statistics
+Implements Algorithm 1 from the reference paper using bootstrap-based max-t statistics
 to construct valid simultaneous confidence intervals for selected regression coefficients
 across a user-specified universe of linear models.
 }

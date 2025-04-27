@@ -15,10 +15,6 @@
 #' @keywords internal
 #' @importFrom stats lm.fit setNames
 #'
-#' @examples
-#' X <- matrix(rnorm(50*3), 50, 3, dimnames = list(NULL, c("X1", "X2", "X3")))
-#' y <- 1 + X[,1] - 2*X[,2] + rnorm(50)
-#' fit_model_q(cbind(1, X), y, q_indices = 1:3)
 
 fit_model_q <- function(X_full, y, q_indices) {
 
