@@ -73,5 +73,6 @@ The `(Intercept)` and `X1` intervals in `model1` should contain their true value
 The intervals are wider than naive intervals to account for model selection uncertainty, ensuring valid coverage across all models in `Q`.
 
 ## Learn More
-Vignette: **vignette("Vignette")**
+Vignette: Run **vignette("Vignette")**.
+
 Source Paper: Kuchibhotla, A., Kolassa, J., & Kuffner, T. (2022). Post-selection inference. Annual Review of Statistics and Its Application, 9(1), 505–527. DOI: 10.1146/annurev-statistics-100421-044639.

@@ -86,7 +86,9 @@ selection uncertainty, ensuring valid coverage across all models in `Q`.
 
 ## Learn More
 
-Vignette: **vignette(“Vignette”)** Source Paper: Kuchibhotla, A.,
-Kolassa, J., & Kuffner, T. (2022). Post-selection inference. Annual
-Review of Statistics and Its Application, 9(1), 505–527. DOI:
+Vignette: Run **vignette(“Vignette”)**.
+
+Source Paper: Kuchibhotla, A., Kolassa, J., & Kuffner, T. (2022).
+Post-selection inference. Annual Review of Statistics and Its
+Application, 9(1), 505–527. DOI:
 10.1146/annurev-statistics-100421-044639.
