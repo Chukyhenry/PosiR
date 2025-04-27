@@ -1,0 +1,434 @@
+---
+title: "Introduction to PosiR"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+bibliography: references.bib
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# PosiR: Post-Selection Inference via Simultaneous Confidence Intervals
+
+Statistical inference after model selection is challenging because standard methods often ignore the selection process, leading to biased results like confidence intervals with lower-than-nominal coverage. This issue, known as post-selection inference (PoSI), is addressed by the `PosiR` package, which implements the methodology from @kuchibhotla2022. `PosiR` constructs confidence intervals that are simultaneously valid across a pre-defined universe of models, ensuring the desired coverage probability (e.g., 95%) regardless of the model selection process.
+
+This vignette introduces PoSI concepts, lists the package functions, explains the methodology, and provides examples.
+
+## Package Functions
+The PosiR package provides two core functions:
+
+1. **`simultaneous_ci()`**  
+   Computes simultaneous confidence intervals for linear regression coefficients across a user-specified universe of models.
+
+**Key Arguments**:
+
+- `X`: Design matrix (n × p, no intercept).
+
+- `y`: Response vector (length n).
+
+- `Q_universe`: Named list of model indices (including intercept if `add_intercept = TRUE`).
+
+- `B`: Number of bootstrap samples (default: 1000).
+
+- `alpha`: Significance level (default: 0.05).
+
+- `verbose`: Logical; if `TRUE`, shows progress messages.
+
+**Returns**:
+
+- `intervals`: Data frame with columns `model_id`, `coefficient_name`, `estimate`, `lower`, `upper`, `psi_hat_nqj`, `se_nqj`.
+
+- `K_alpha`: Critical value for simultaneous coverage.
+
+- Other diagnostic outputs (e.g., `T_star_b`, ``warnings).
+
+2. **`plot.simultaneous_ci_result()`**  
+
+   Visualizes results from simultaneous_ci().
+   
+**Key Arguments**:
+
+- `x`: A `simultaneous_ci_result` object.
+
+- `subset_pars`: Vector of coefficient names to plot.
+
+- `las.labels`: Label orientation (e.g., 2 for perpendicular).
+
+- `col.ci`: Color of the confidence intervals.
+
+- `main`: Plot title.
+
+## Theoretical Foundation
+
+`PosiR` constructs confidence intervals for coefficients $\theta_{q,j}$ (where $q$ denotes a model in the universe $\mathcal{Q}$ and $j$ denotes a specific coefficient within that model) that are simultaneously valid. 
+
+$$
+P(\theta_{q,j} \in \widehat{\text{CI}}_{q,j} \text{ for all } q \in \mathcal{Q}, j \text{ in model } q) \ge 1-\alpha
+$$
+
+The interval for $\theta_{q,j}$ is:
+$$
+\widehat{\text{CI}}_{q,j} = \left[ \widehat{\theta}_{q,j} \pm \widehat{K}_{\alpha} \frac{\widehat{\Psi}_{n,q,j}^{1/2}}{\sqrt{n}} \right]
+$$
+where:
+
+- $\widehat{\theta}_{q,j}$ is the estimate of the coefficient (e.g., from OLS) in model $q$ using the original data.
+
+- $\widehat{\Psi}_{n,q,j}$ is an estimate of the asymptotic variance of $\sqrt{n}(\widehat{\theta}_{q,j} - \theta_{q,j})$.
+
+- $\widehat{K}_{\alpha}$ is a critical value (quantile) obtained from a bootstrap procedure, designed to ensure simultaneous coverage.
+
+The bootstrap procedure (Algorithm 1 from @kuchibhotla2022) is:
+
+1. **Original Estimate:** Compute $\widehat{\theta}_{q,j}$ for all relevant $j$ in all models $q \in \mathcal{Q}$ using the original data.
+
+2. **Bootstrap Sampling:** For $b = 1, \ldots, B$, resample pairs $(X_i, y_i)$ with replacement from the original data to compute the bootstrap estimates $\widehat{\theta}_{q,j}^{*b}$ for all $j, q$.
+
+3. **Variance Estimation:**
+
+   $$
+   \widehat{\Psi}_{n,q,j} := \frac{1}{B_{valid}-1} \sum_{b \in \text{valid}} \left[ \sqrt{n} \left( \widehat{\theta}_{q,j}^{*b} - \widehat{\theta}_{q,j} \right) \right]^2
+   $$
+   
+4. **Bootstrap Max-t Statistics (\( T^{*b} \))**
+   $$
+   T^{*b} := \max_{q \in \mathcal{Q}} \max_{j \in \text{coeffs}(q)} \left| n^{1/2} \widehat{\Psi}_{n,q,j}^{-1/2} \left( \widehat{\theta}_{q,j}^{*b} - \widehat{\theta}_{q,j} \right) \right|
+   $$
+   
+5. **Critical Value:**
+   Compute $\widehat{K}_{\alpha}$ as the $(1-\alpha)$ quantile of the collected bootstrap max-t statistics $\{ T^{*1}, \ldots, T^{*B} \}$.
+   
+6. **Confidence Intervals:**
+   $$
+   \widehat{\theta}_{q,j} \pm \widehat{K}_{\alpha} \sqrt{\widehat{\Psi}_{n,q,j}/n}
+   $$
+
+By using $\widehat{K}_{\alpha}$ derived from the maximum statistic across the model universe, the resulting intervals achieve the desired simultaneous coverage probability:
+$$
+P(\text{all } \theta_{q,j} \in \widehat{\text{CI}}_{q,j}) \ge 1-\alpha
+$$
+
+## Installation
+
+First, ensure `devtools` is installed:
+```{r installation}
+#if (!requireNamespace("devtools", quietly = TRUE)) {
+  #install.packages("devtools")
+#}
+#devtools::install_github("Chukyhenry/PosiR")
+```
+
+**Optional dependencies**:
+
+`pbapply`: For progress bars during computation.
+`glmnet`: For the Lasso example (Example 3).
+
+```{r}
+#install.packages("pbapply")
+#install.packages("glmnet")
+```
+
+#### Load the package
+
+```{r}
+if (!requireNamespace("dplyr", quietly = TRUE)) {
+  stop("Please install the 'dplyr' package to run this vignette.")
+}
+library(PosiR)
+library(dplyr)
+library(stats)
+```
+
+# Example 1: Simulated Data
+We simulate data where Age affects the response $\beta_{\text{Age}} = 0.5$.
+
+```{r, message=FALSE}
+set.seed(123) # for reproducibility
+X <- matrix(rnorm(200 * 2), ncol = 2, dimnames = list(NULL, c("Age", "Income")))
+y <- 0.5 * X[, "Age"] + rnorm(200)  # the true intercept is 0, the true coefficient for Age is 0.5, and the true coefficient for Income is 0.
+```
+
+#### Define the model universe:
+
+We specify a universe $\mathcal{Q}$ containing two potential models: one with only Age and one with both Age and Income. The indices refer to the columns in X. Note that `simultaneous_ci` adds an intercept by default (add_intercept = TRUE), which will also be included in the inference.
+```{r}
+Q <- list(
+  Age_only = 1,              # Model with Intercept + Age
+  Age_Income = c(1, 2)       # Model with Intercept + Age + Income
+)
+# Indices refer to columns of X: 1="Age", 2="Income"
+```
+
+#### Run simultaneous_ci():
+
+We call the function, providing the data X, y, and the model universe Q. We use B=1000 bootstrap samples for reasonably stable results, cores=2 to speed up computation via parallel processing (adjust based on your machine), and seed for reproducibility. verbose=FALSE suppresses progress messages.
+```{r warning=FALSE, message=FALSE}
+result <- simultaneous_ci(X, y, Q, B = 1000, cores = 2, verbose = FALSE)
+```
+
+The output `result` is a list. Key components include:
+
+- `intervals`: A data frame with estimates and simultaneous CIs.
+
+- `K_alpha`: The calculated critical value $\widehat{K}_{\alpha}$. 
+
+```{r}
+# Show the calculated critical value
+print(paste("Calculated K_alpha:", round(result$K_alpha, 3)))
+
+# Display the intervals data frame
+print(result$intervals)
+```
+
+The columns of the resulting `intervals` data frame are:
+
+- `model_id`: Name of the model from `Q`.
+
+- `coefficient_name`: Name of the coefficient (including intercept).
+
+- `estimate`: Point estimate $\widehat{\theta}_{q,j}$.
+
+- `lower`, `upper`: Bounds of the $(1-\alpha)$% simultaneous confidence interval.
+
+- `psi_hat_nqj`: Bootstrap variance estimate $\widehat{\Psi}_{n,q,j}$.
+
+- `se_nqj`: Standard error estimate $\sqrt{\widehat{\Psi}_{n,q,j}/n}$.
+
+#### Visualize Intervals
+
+We use the S3 plot method for `simultaneous_ci_result` objects. las.labels=2 rotates labels for readability.
+```{r}
+plot(result, las.labels = 2, col.ci = "darkblue", main = "Simultaneous Confidence Intervals")
+```
+#### Interpretation
+
+## 6. Interpretation
+
+**Age Coefficient:** The point estimates for `Age` in both models are close to the true value of 0.5. Importantly, the simultaneous 95% confidence intervals (e.g., approx. [0.26, 0.67] for the `Age_Income` model) comfortably contain the true value 0.5 and exclude 0, correctly indicating a significant effect.
+
+**Income Coefficient:** The point estimate for `Income` (only present in the `Age_Income` model) is close to 0. The simultaneous CI (approx. [-0.19, 0.17]) contains the true value 0, correctly suggesting no significant effect.
+
+**Intercept:** The point estimates for the `(Intercept)` are close to 0. The simultaneous CIs contain the true value 0, indicating no significant intercept term.
+
+**Simultaneous Validity:** These intervals are valid *simultaneously*. We can be 95% confident that *all* these reported intervals contain their respective true parameter values, regardless of whether we decided to focus on the "Age_only" or "Age_Income" model after looking at the data.
+
+
+# Example 2: `mtcars` Dataset
+
+Now, let’s apply the method to a real dataset, `mtcars`, to predict miles per gallon (mpg).
+
+#### Prepare data
+We select hp (horsepower), wt (weight), and qsec (1/4 mile time) as potential predictors for mpg.
+```{r}
+data(mtcars)
+X_mtcars <- as.matrix(mtcars[, c("hp", "wt", "qsec")])
+y_mtcars <- mtcars$mpg
+```
+
+#### Define models
+We consider models involving each predictor individually and a full model with all three. The indices refer to columns in `X_mtcars`. The intercept is added automatically by `simultaneous_ci`.
+
+```{r}
+Q_mtcars <- list(
+  HP_only = 1,         # Model: mpg ~ Intercept + hp
+  WT_only = 2,         # Model: mpg ~ Intercept + wt
+  QSEC_only = 3,       # Model: mpg ~ Intercept + qsec
+  Full_Model = 1:3     # Model: mpg ~ Intercept + hp + wt + qsec
+)
+# Indices: 1="hp", 2="wt", 3="qsec"
+```
+
+#### Run `simultaneous_ci()`
+```{r}
+result_mtcars <- simultaneous_ci(X = X_mtcars, y = y_mtcars, Q_universe = Q_mtcars,
+                                 B = 2000, cores = 2, seed = 123, verbose = FALSE)
+
+# Display the critical value
+print(paste("Calculated K_alpha:", round(result_mtcars$K_alpha, 3)))
+```
+
+#### Compare simultaneous vs. naive 95% intervals:
+We calculate the standard "naive" 95% confidence intervals using the normal approximation $z_{\alpha/2}$ quantile and the same standard error estimate $\sqrt{\widehat{\Psi}_{n,q,j}/n}$ derived from the bootstrap. The naive interval is:
+$$
+\widehat{\text{CI}}_{q,j}^{\text{unadj}} = \left[ \widehat{\theta}_{q,j} \pm z_{\alpha/2} \frac{\widehat{\Psi}_{n,q,j}^{1/2}}{\sqrt{n}} \right]
+$$
+where $z_{\alpha/2} \approx 1.96$ for $\alpha = 0.05$.
+
+```{r message=FALSE}
+z_alpha_2 <- stats::qnorm(0.975) 
+
+intervals_comparison <- result_mtcars$intervals %>%
+  mutate(
+    naive_lower = estimate - z_alpha_2 * se_nqj,
+    naive_upper = estimate + z_alpha_2 * se_nqj
+  ) %>%
+  select(model_id, coefficient_name, estimate, lower, upper, naive_lower, naive_upper) %>%
+  arrange(model_id, coefficient_name) # Ensure consistent ordering
+
+print(intervals_comparison, digits = 3)
+```
+
+#### Visualize intervals
+
+```{r}
+plot(result_mtcars, las.labels = 2, main = "mtcars Data: Simultaneous CIs")
+```
+
+#### Interpretation
+
+**Interval Width:** As expected, the simultaneous intervals (lower, upper) are uniformly wider than the corresponding naive intervals (naive_lower, naive_upper). This widening is caused by the multiplier $\widehat{K}_{\alpha}$ being larger than $z_{\alpha/2} \approx 1.96$. 
+
+**Significance:** For these mtcars models, the conclusions about which coefficients are statistically significant (i.e., interval excludes zero) do not change between the naive and simultaneous intervals. For example, hp and wt generally show significant negative associations with mpg, while qsec and the intercept terms show less significance.
+
+**PoSI Correction:** The key takeaway is that the simultaneous intervals provide valid inference *after* considering multiple models. If we had used the naive intervals and selected, for instance, the Full_Model because it looked "best" based on some criterion, the naive intervals for that model's coefficients would not strictly be 95% confidence intervals due to the selection bias. The simultaneous intervals, however, maintain their 95% coverage guarantee across the entire set Q_mtcars. This correction ensures our conclusions are not overly optimistic.
+
+
+# Example 3: High-Dimensional Data with Lasso Selection
+A common workflow involves using a variable selection method like Lasso to choose a smaller model from many potential predictors, followed by inference on the selected model. `PosiR` can provide valid post-selection inference in this context by defining a universe $\mathcal{Q}$ that includes at least the Lasso-selected model.
+
+#### Simulate Data with Interaction
+We simulate data with $100$ observations and $50$ predictors, where only the first 5 predictors ($X_1, \ldots, X_5$) have non-zero coefficients.
+```{r}
+set.seed(123)
+n_lasso <- 100
+p_lasso <- 50
+X_lasso <- matrix(rnorm(n_lasso * p_lasso), n_lasso, p_lasso,
+                  dimnames = list(NULL, paste0("X", 1:p_lasso)))
+
+# True coefficients: 1 for first 5, 0 for rest
+beta_true <- c(rep(1.0, 5), rep(0, p_lasso - 5))
+true_intercept <- 0.5
+
+# Generate response (linear model)
+y_lasso <- drop(true_intercept + X_lasso %*% beta_true + rnorm(n_lasso))
+```
+
+#### Perform Lasso Selection (if glmnet is available)
+We use `glmnet` to perform Lasso regression and identify variables selected using cross-validation (lambda.min).
+```{r}
+# This chunk only runs if glmnet is installed
+library(glmnet)
+
+# Use cv.glmnet to find optimal lambda
+cv_lasso_fit <- cv.glmnet(X_lasso, y_lasso, alpha = 1) # alpha=1 for Lasso
+
+# Get coefficients at lambda.min, excluding the intercept
+lasso_coeffs <- coef(cv_lasso_fit, s = "lambda.min")[-1, 1]
+
+# Identify indices of selected variables (non-zero coefficients)
+# Indices are relative to the columns of X_lasso (1 to p_lasso)
+select_var_index <- which(lasso_coeffs != 0)
+
+# Get names of selected variables
+select_var_names <- names(select_var_index)
+
+cat("Lasso selected variables (indices in X_lasso):", paste(select_var_index, collapse = ", "), "\n")
+cat("Lasso selected variables (names):", paste(select_var_names, collapse = ", "), "\n")
+
+# If no variables selected (unlikely here), handle gracefully for Q definition
+if (length(select_var_index) == 0) {
+    warning("Lasso selected no variables. Defining Q with intercept-only and full model.")
+    select_var_index1 <- 1 # Just intercept index for design matrix
+} else {
+    # IMPORTANT: Need indices relative to the design matrix used in simultaneous_ci
+    # which includes intercept as column 1. Add 1 to Lasso indices.
+    select_var_index1 <- c(1, select_var_index + 1)
+}
+```
+
+```{r}
+# Fallback if glmnet is not installed
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  warning("glmnet package not found. Using arbitrary selection for vignette.", call. = FALSE)
+  select_var_index <- c(1, 2, 3, 4, 5, 9, 13, 18, 22, 24, 26, 29, 33, 36, 41)
+  select_var_names <- paste0("X", select_var_index)
+  select_var_index1 <- c(1, select_var_index + 1)
+}
+```
+
+####  Define model universe
+Our universe $\mathcal{Q}$ for post-selection inference must include the model selected by Lasso. We can also include other models, like the full model, for comparison or robustness.
+
+```{r}
+# Indices for X in simultaneous_ci context (assuming add_intercept=TRUE)
+# Intercept is 1, X1 is 2, ..., Xp is p+1
+full_model_indices <- 1:(p_lasso + 1)
+
+Q_lasso <- list(
+  # Model selected by Lasso (Intercept + selected X's)
+  LassoSelected = select_var_index1,
+  # Full model (Intercept + All X's) - optional, but common for context
+  FullModel = full_model_indices
+)
+
+# Check if Lasso selection was empty
+if (length(select_var_index1) == 1 && select_var_index1 == 1) {
+    Q_lasso$LassoSelected <- 1 # Ensure it's just the intercept index
+}
+
+print("Models in Q_lasso (indices refer to design matrix with intercept):")
+# Print only first few indices for brevity if models are large
+print(lapply(Q_lasso, function(idx) if(length(idx)>10) c(idx[1:5], "...", idx[length(idx)]) else idx))
+
+```
+
+#### `Run simultaneous_ci()`
+We now run `PosiR` using the original data (X_lasso, y_lasso) and the universe Q_lasso containing the data-dependent Lasso model.
+```{r}
+# Note: We pass the original X matrix (without intercept) to simultaneous_ci
+# It will add the intercept based on add_intercept=TRUE
+result_lasso <- simultaneous_ci(
+  X_lasso, y_lasso, Q_lasso,
+  B = 2000, # Recommend B=2000+ for high-dim
+  cores = 2, seed = 123, verbose = FALSE
+)
+```
+
+#### Compare Intervals (Focus on Selected Model)
+
+
+```{r}
+intervals_lasso_comp <- result_lasso$intervals %>%
+  filter(model_id == "LassoSelected") %>% # Focus on the Lasso model
+  mutate(
+    naive_lower = estimate - qnorm(0.975) * se_nqj,
+    naive_upper = estimate + qnorm(0.975) * se_nqj
+  ) %>%
+  select(coefficient_name, estimate, lower, upper, naive_lower, naive_upper) %>%
+  arrange(match(coefficient_name, c("(Intercept)", paste0("X", 1:p_lasso)))) # Order numerically
+
+print(intervals_lasso_comp, digits = 3)
+```
+
+#### Visualization (Selected Model Coefficients)
+```{r}
+# Plot only coefficients from the Lasso-selected model
+selected_plot <- result_lasso$intervals %>%
+                            filter(model_id == "LassoSelected") %>%
+                            pull(coefficient_name)
+
+plot(result_lasso, subset_pars = selected_plot,
+     main = "Simultaneous CIs for Lasso-Selected Model", las.labels = 1)
+```
+
+#### Interpretation
+
+**Post-Selection Validity**: The simultaneous confidence intervals (lower, upper) provide statistically valid 95% coverage after selecting the model using Lasso. They account for the uncertainty introduced by the data-driven variable selection step.
+
+**Protection Against False Discoveries**: For the true predictors (X1-X5), both interval types correctly identify them as significant. However, for several noise predictors incorrectly selected by Lasso (X18, X24), the naive intervals misleadingly suggest statistical significance (they exclude the true value of 0). The simultaneous intervals, being wider due to the $\widehat{K}_{\alpha}$ adjustment, correctly contain 0 for these noise predictors, thus protecting against false positive conclusions.
+
+**Cost of Validity**: This protection comes at the cost of wider intervals for all coefficients, reflecting the true uncertainty post-selection. 
+
+# Conclusion
+
+The `PosiR` package provides a practical implementation of the simultaneous inference framework from @kuchibhotla2022. By using the `simultaneous_ci()` function, researchers can obtain valid confidence intervals for linear model coefficients even when model selection has been performed, ensuring robust and reliable statistical conclusions. Remember that the validity is with respect to the specified universe of models 
+$\mathcal{Q}$.
+
+# Reference

@@ -4,3 +4,5 @@
 ^\.Rproj\.user$
 ^README\.Rmd$
 ^\.github$
+^man/figures/
+^tests/testthat/_snaps/

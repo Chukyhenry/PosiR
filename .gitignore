@@ -7,3 +7,17 @@
 .DS_Store
 .quarto
 inst/doc
+.Rprofile
+README.html
+man/figures/
+*.html
+*.R
+*.pdf
+*.aux
+library/
+local/
+cellar/
+lock/
+python/
+sandbox/
+staging/

@@ -43,6 +43,7 @@
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @import parallel
 #' @examples
+#' \dontrun{
 #' set.seed(123)
 #' X <- matrix(rnorm(100 * 2), 100, 2, dimnames = list(NULL, c("X1", "X2")))
 #' y <- X[,1] * 0.5 + rnorm(100)

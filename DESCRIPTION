@@ -1,24 +1,23 @@
 Package: PosiR
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Post-Selection Inference via Simultaneous Confidence Intervals
 Version: 0.1.0
 Authors@R: c(
-    person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
-    )
-  )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+    person("Henry", "Chukwuma",
+           email = "chukyhenry55@gmail.com",
+           role = c("aut", "cre")))
+Description: Provides tools for post-selection inference (PoSI) in linear regression models,
+    constructing simultaneous confidence intervals across a user-specified universe of models.
+    Implements the methodology from Kuchibhotla et al. (2022) to ensure valid inference after model
+    selection, with applications in high-dimensional settings like Lasso selection.
+License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
 Suggests: 
     knitr,
     pbapply,
     rmarkdown,
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    dplyr
 Config/testthat/edition: 3
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2
@@ -30,3 +29,5 @@ Imports:
     parallel,
     stats
 VignetteBuilder: knitr
+Depends: 
+    R (>= 4.0.0)
