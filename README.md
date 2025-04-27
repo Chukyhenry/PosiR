@@ -5,82 +5,119 @@
 
 [![R-CMD-check](https://github.com/Chukyhenry/PosiR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Chukyhenry/PosiR/actions)
 
-**PosiR** provides valid post-selection inference (PoSI) for linear
-regression models, based on simultaneous confidence intervals using
-bootstrap-based max-t statistics.
-
-It implements Algorithm 1 from [Kuchibhotla et
-al. (2022)](http://dx.doi.org/10.1146/annurev-statistics-100421-044639),
-designed to give valid coverage even after variable selection.
-
-------------------------------------------------------------------------
+**PosiR** provides tools for post-selection inference (PoSI) in linear
+regression models. PoSI addresses the challenge of performing valid
+statistical inference after model selection, ensuring that confidence
+intervals maintain their nominal coverage probability (e.g., 95%) even
+when the model is chosen based on the data. The package implements
+simultaneous confidence intervals using bootstrap-based max-t
+statistics, following Algorithm 1 from Kuchibhotla et al. (2022).
 
 ## Installation
 
+You can install the development version of `PosiR` from GitHub:
+
 ``` r
-# Install development version from GitHub
-devtools::install_github("Chukyhenry/PosiR")
-#> Using GitHub PAT from the git credential store.
-#> Downloading GitHub repo Chukyhenry/PosiR@HEAD
-#> ── R CMD build ──────────────────────────────────────────
-#>      checking for file ‘/private/var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T/RtmpnZ82nH/remotes1362b55cc26a4/Chukyhenry-PosiR-ff3be1e/DESCRIPTION’ ...  ✔  checking for file ‘/private/var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T/RtmpnZ82nH/remotes1362b55cc26a4/Chukyhenry-PosiR-ff3be1e/DESCRIPTION’
+# Install devtools if not already installed
+if (!requireNamespace("devtools", quietly = TRUE)) {
+  install.packages("devtools")
+}
+# Install PosiR
+devtools::install()
+#> ── R CMD build ───────────────────────────────────────────────────
+#>      checking for file ‘/Users/henrychukwuma/Documents/Spring 2025/STAT 8054/Project/PosiR/DESCRIPTION’ ...  ✔  checking for file ‘/Users/henrychukwuma/Documents/Spring 2025/STAT 8054/Project/PosiR/DESCRIPTION’
 #>   ─  preparing ‘PosiR’:
 #>    checking DESCRIPTION meta-information ...  ✔  checking DESCRIPTION meta-information
 #>   ─  checking for LF line-endings in source and make files and shell scripts
 #>   ─  checking for empty or unneeded directories
-#>    Omitted ‘LazyData’ from DESCRIPTION
-#>   ─  building ‘PosiR_0.1.0.tar.gz’
+#>    Removed empty directory ‘PosiR/man/figures’
+#> ─  building ‘PosiR_0.1.0.tar.gz’
 #>      
+#> Running /Library/Frameworks/R.framework/Resources/bin/R CMD \
+#>   INSTALL \
+#>   /var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T//Rtmp2lOOaq/PosiR_0.1.0.tar.gz \
+#>   --install-tests 
+#> * installing to library ‘/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library’
+#> * installing *source* package ‘PosiR’ ...
+#> ** using staged installation
+#> ** R
+#> ** tests
+#> ** byte-compile and prepare package for lazy loading
+#> ** help
+#> *** installing help indices
+#> ** building package indices
+#> ** installing vignettes
+#> ** testing if installed package can be loaded from temporary location
+#> ** testing if installed package can be loaded from final location
+#> ** testing if installed package keeps a record of temporary installation path
+#> * DONE (PosiR)
+
+# Optional dependencies for vignette and examples
+install.packages(c("dplyr", "pbapply"))
 #> 
-#> Installing package into '/Users/henrychukwuma/Library/Caches/org.R-project.R/R/renv/library/PosiR-741335c4/macos/R-4.4/aarch64-apple-darwin20'
-#> (as 'lib' is unspecified)
-#> Warning in i.p(...): installation of package
-#> '/var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T//RtmpnZ82nH/file1362b4dfd04fd/PosiR_0.1.0.tar.gz'
-#> had non-zero exit status
+#> The downloaded binary packages are in
+#>  /var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T//Rtmp2lOOaq/downloaded_packages
 ```
 
-## Example
+## Example: Simultaneous Confidence Intervals
 
-This is a basic example which shows you how to solve a common problem:
+This example demonstrates how to use `simultaneous_ci()` to compute
+simultaneous confidence intervals for regression coefficients across a
+set of models:
 
 ``` r
-devtools::load_all()
-#> ℹ Loading PosiR
-# Simulate some data
+library(PosiR)
+
+# Simulate data
 set.seed(123)
 X <- matrix(rnorm(100 * 3), 100, 3)
 colnames(X) <- c("X1", "X2", "X3")
-y <- 1 + X[,1] * 0.5 + rnorm(100)
+y <- 1 + X[, "X1"] * 0.5 + rnorm(100)  # True intercept = 1, X1 coefficient = 0.5
 
-# Define models (column indices)
-Q <- list(model1 = 1:2, model2 = 1:4)
+# Define model universe (column indices of X)
+Q <- list(
+  model1 = 1:2,  # Model with X1, X2
+  model2 = 1:3   # Model with X1, X2, X3
+)
 
-# Run PoSI
+# Compute simultaneous confidence intervals
 result <- simultaneous_ci(X, y, Q, B = 500, verbose = FALSE)
 
 # View results
 print(result$intervals)
-#>   model_id coefficient_name    estimate      lower
-#> 1   model1      (Intercept)  0.96831201  0.7019780
-#> 2   model1               X1  0.44983825  0.1861455
-#> 3   model2      (Intercept)  0.98067390  0.7074605
-#> 4   model2               X1  0.44454938  0.1809392
-#> 5   model2               X2  0.04621817 -0.2186037
-#> 6   model2               X3 -0.05738700 -0.3736027
-#>       upper psi_hat_nqj    se_nqj
-#> 1 1.2346460    1.084196 0.1041248
-#> 2 0.7135310    1.062799 0.1030922
-#> 3 1.2538873    1.140929 0.1068143
-#> 4 0.7081596    1.062134 0.1030599
-#> 5 0.3110400    1.071920 0.1035336
-#> 6 0.2588287    1.528346 0.1236263
-plot(result)
+#>   model_id coefficient_name   estimate      lower     upper
+#> 1   model1      (Intercept) 0.96831201  0.7198033 1.2168207
+#> 2   model1               X1 0.44983825  0.2037940 0.6958825
+#> 3   model2      (Intercept) 0.97292290  0.7230406 1.2228052
+#> 4   model2               X1 0.45219170  0.2012421 0.7031413
+#> 5   model2               X2 0.04485171 -0.1971332 0.2868366
+#>   psi_hat_nqj    se_nqj
+#> 1    1.084196 0.1041248
+#> 2    1.062799 0.1030922
+#> 3    1.096215 0.1047003
+#> 4    1.105600 0.1051475
+#> 5    1.028019 0.1013913
+
+# Plot the intervals
+plot(result, main = "Simultaneous Confidence Intervals", las.labels = 1)
 ```
 
-<img src="man/figures/README-example-1.png" width="100%" />
+<img src="man/figures/README-example-1.png" width="100%" /> \##
+Interpretation
+
+The output `result$intervals` provides the coefficient estimates and
+simultaneous 95% confidence intervals for each model in `Q`. For
+example:
+
+The `(Intercept)` and `X1` intervals in `model1` should contain their
+true values (1 and 0.5, respectively).
+
+The intervals are wider than naive intervals to account for model
+selection uncertainty, ensuring valid coverage across all models in `Q`.
 
 ## Learn More
 
-Vignette: **vignette(“introduction_to_posir”)** [Online
-Documentation](https://chukyhenry.github.io/PosiR/) Source Paper:
-**Kuchibhotla et al. (2022)**
+Vignette: **vignette(“Vignette”)** Source Paper: Kuchibhotla, A.,
+Kolassa, J., & Kuffner, T. (2022). Post-selection inference. Annual
+Review of Statistics and Its Application, 9(1), 505–527. DOI:
+10.1146/annurev-statistics-100421-044639.
