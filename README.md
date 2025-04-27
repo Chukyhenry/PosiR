@@ -24,39 +24,9 @@ if (!requireNamespace("devtools", quietly = TRUE)) {
 }
 # Install PosiR
 devtools::install()
-#> ── R CMD build ───────────────────────────────────────────────────
-#>      checking for file ‘/Users/henrychukwuma/Documents/Spring 2025/STAT 8054/Project/PosiR/DESCRIPTION’ ...  ✔  checking for file ‘/Users/henrychukwuma/Documents/Spring 2025/STAT 8054/Project/PosiR/DESCRIPTION’
-#>   ─  preparing ‘PosiR’:
-#>    checking DESCRIPTION meta-information ...  ✔  checking DESCRIPTION meta-information
-#>   ─  checking for LF line-endings in source and make files and shell scripts
-#>   ─  checking for empty or unneeded directories
-#>    Removed empty directory ‘PosiR/man/figures’
-#> ─  building ‘PosiR_0.1.0.tar.gz’
-#>      
-#> Running /Library/Frameworks/R.framework/Resources/bin/R CMD \
-#>   INSTALL \
-#>   /var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T//Rtmp2lOOaq/PosiR_0.1.0.tar.gz \
-#>   --install-tests 
-#> * installing to library ‘/Library/Frameworks/R.framework/Versions/4.4-arm64/Resources/library’
-#> * installing *source* package ‘PosiR’ ...
-#> ** using staged installation
-#> ** R
-#> ** tests
-#> ** byte-compile and prepare package for lazy loading
-#> ** help
-#> *** installing help indices
-#> ** building package indices
-#> ** installing vignettes
-#> ** testing if installed package can be loaded from temporary location
-#> ** testing if installed package can be loaded from final location
-#> ** testing if installed package keeps a record of temporary installation path
-#> * DONE (PosiR)
 
 # Optional dependencies for vignette and examples
 install.packages(c("dplyr", "pbapply"))
-#> 
-#> The downloaded binary packages are in
-#>  /var/folders/4f/jz1fz83n0tg9csh3mc718cs80000gn/T//Rtmp2lOOaq/downloaded_packages
 ```
 
 ## Example: Simultaneous Confidence Intervals
@@ -85,18 +55,18 @@ result <- simultaneous_ci(X, y, Q, B = 500, verbose = FALSE)
 
 # View results
 print(result$intervals)
-#>   model_id coefficient_name   estimate      lower     upper
-#> 1   model1      (Intercept) 0.96831201  0.7198033 1.2168207
-#> 2   model1               X1 0.44983825  0.2037940 0.6958825
-#> 3   model2      (Intercept) 0.97292290  0.7230406 1.2228052
-#> 4   model2               X1 0.45219170  0.2012421 0.7031413
-#> 5   model2               X2 0.04485171 -0.1971332 0.2868366
-#>   psi_hat_nqj    se_nqj
-#> 1    1.084196 0.1041248
-#> 2    1.062799 0.1030922
-#> 3    1.096215 0.1047003
-#> 4    1.105600 0.1051475
-#> 5    1.028019 0.1013913
+#>   model_id coefficient_name   estimate      lower     upper psi_hat_nqj
+#> 1   model1      (Intercept) 0.96831201  0.7198033 1.2168207    1.084196
+#> 2   model1               X1 0.44983825  0.2037940 0.6958825    1.062799
+#> 3   model2      (Intercept) 0.97292290  0.7230406 1.2228052    1.096215
+#> 4   model2               X1 0.45219170  0.2012421 0.7031413    1.105600
+#> 5   model2               X2 0.04485171 -0.1971332 0.2868366    1.028019
+#>      se_nqj
+#> 1 0.1041248
+#> 2 0.1030922
+#> 3 0.1047003
+#> 4 0.1051475
+#> 5 0.1013913
 
 # Plot the intervals
 plot(result, main = "Simultaneous Confidence Intervals", las.labels = 1)

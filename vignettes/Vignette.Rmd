@@ -67,10 +67,10 @@ The PosiR package provides two core functions:
 
 ## Theoretical Foundation
 
-`PosiR` constructs confidence intervals for coefficients $\theta_{q,j}$ (where $q$ denotes a model in the universe $\mathcal{Q}$ and $j$ denotes a specific coefficient within that model) that are simultaneously valid. 
+`PosiR` constructs confidence intervals for coefficients $\theta_{q,j}$ (where $q$ denotes a model in the universe 𝒬 and $j$ denotes a specific coefficient within that model) that are simultaneously valid. 
 
 $$
-P(\theta_{q,j} \in \widehat{\text{CI}}_{q,j} \text{ for all } q \in \mathcal{Q}, j \text{ in model } q) \ge 1-\alpha
+P(\theta_{q,j} \in \widehat{\text{CI}}_{q,j} \text{ for all } q \in 𝒬, j \text{ in model } q) \ge 1-\alpha
 $$
 
 The interval for $\theta_{q,j}$ is:
@@ -87,7 +87,7 @@ where:
 
 The bootstrap procedure (Algorithm 1 from @kuchibhotla2022) is:
 
-1. **Original Estimate:** Compute $\widehat{\theta}_{q,j}$ for all relevant $j$ in all models $q \in \mathcal{Q}$ using the original data.
+1. **Original Estimate:** Compute $\widehat{\theta}_{q,j}$ for all relevant $j$ in all models $q \in 𝒬$ using the original data.
 
 2. **Bootstrap Sampling:** For $b = 1, \ldots, B$, resample pairs $(X_i, y_i)$ with replacement from the original data to compute the bootstrap estimates $\widehat{\theta}_{q,j}^{*b}$ for all $j, q$.
 
@@ -99,7 +99,7 @@ The bootstrap procedure (Algorithm 1 from @kuchibhotla2022) is:
    
 4. **Bootstrap Max-t Statistics (\( T^{*b} \))**
    $$
-   T^{*b} := \max_{q \in \mathcal{Q}} \max_{j \in \text{coeffs}(q)} \left| n^{1/2} \widehat{\Psi}_{n,q,j}^{-1/2} \left( \widehat{\theta}_{q,j}^{*b} - \widehat{\theta}_{q,j} \right) \right|
+   T^{*b} := \max_{q \in 𝒬} \max_{j \in \text{coeffs}(q)} \left| n^{1/2} \widehat{\Psi}_{n,q,j}^{-1/2} \left( \widehat{\theta}_{q,j}^{*b} - \widehat{\theta}_{q,j} \right) \right|
    $$
    
 5. **Critical Value:**
@@ -118,11 +118,11 @@ $$
 ## Installation
 
 First, ensure `devtools` is installed:
-```{r installation}
-#if (!requireNamespace("devtools", quietly = TRUE)) {
-  #install.packages("devtools")
-#}
-#devtools::install_github("Chukyhenry/PosiR")
+```{r installation, eval=FALSE}
+if (!requireNamespace("devtools", quietly = TRUE)) {
+  install.packages("devtools")
+}
+devtools::install_github("Chukyhenry/PosiR")
 ```
 
 **Optional dependencies**:
@@ -130,9 +130,9 @@ First, ensure `devtools` is installed:
 `pbapply`: For progress bars during computation.
 `glmnet`: For the Lasso example (Example 3).
 
-```{r}
-#install.packages("pbapply")
-#install.packages("glmnet")
+```{r eval=FALSE}
+install.packages("pbapply")
+install.packages("glmnet")
 ```
 
 #### Load the package
@@ -157,7 +157,7 @@ y <- 0.5 * X[, "Age"] + rnorm(200)  # the true intercept is 0, the true coeffici
 
 #### Define the model universe:
 
-We specify a universe $\mathcal{Q}$ containing two potential models: one with only Age and one with both Age and Income. The indices refer to the columns in X. Note that `simultaneous_ci` adds an intercept by default (add_intercept = TRUE), which will also be included in the inference.
+We specify a universe $𝒬$ containing two potential models: one with only Age and one with both Age and Income. The indices refer to the columns in X. Note that `simultaneous_ci` adds an intercept by default (add_intercept = TRUE), which will also be included in the inference.
 ```{r}
 Q <- list(
   Age_only = 1,              # Model with Intercept + Age
@@ -291,7 +291,7 @@ plot(result_mtcars, las.labels = 2, main = "mtcars Data: Simultaneous CIs")
 
 
 # Example 3: High-Dimensional Data with Lasso Selection
-A common workflow involves using a variable selection method like Lasso to choose a smaller model from many potential predictors, followed by inference on the selected model. `PosiR` can provide valid post-selection inference in this context by defining a universe $\mathcal{Q}$ that includes at least the Lasso-selected model.
+A common workflow involves using a variable selection method like Lasso to choose a smaller model from many potential predictors, followed by inference on the selected model. `PosiR` can provide valid post-selection inference in this context by defining a universe $𝒬$ that includes at least the Lasso-selected model.
 
 #### Simulate Data with Interaction
 We simulate data with $100$ observations and $50$ predictors, where only the first 5 predictors ($X_1, \ldots, X_5$) have non-zero coefficients.
@@ -354,7 +354,7 @@ if (!requireNamespace("glmnet", quietly = TRUE)) {
 ```
 
 ####  Define model universe
-Our universe $\mathcal{Q}$ for post-selection inference must include the model selected by Lasso. We can also include other models, like the full model, for comparison or robustness.
+Our universe $𝒬$ for post-selection inference must include the model selected by Lasso. We can also include other models, like the full model, for comparison or robustness.
 
 ```{r}
 # Indices for X in simultaneous_ci context (assuming add_intercept=TRUE)
@@ -428,7 +428,6 @@ plot(result_lasso, subset_pars = selected_plot,
 
 # Conclusion
 
-The `PosiR` package provides a practical implementation of the simultaneous inference framework from @kuchibhotla2022. By using the `simultaneous_ci()` function, researchers can obtain valid confidence intervals for linear model coefficients even when model selection has been performed, ensuring robust and reliable statistical conclusions. Remember that the validity is with respect to the specified universe of models 
-$\mathcal{Q}$.
+The `PosiR` package provides a practical implementation of the simultaneous inference framework from @kuchibhotla2022. By using the `simultaneous_ci()` function, researchers can obtain valid confidence intervals for linear model coefficients even when model selection has been performed, ensuring robust and reliable statistical conclusions. Remember that the validity is with respect to the specified universe of models $𝒬$.
 
 # Reference

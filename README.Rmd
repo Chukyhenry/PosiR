@@ -24,7 +24,7 @@ knitr::opts_chunk$set(
 
 ## Installation
 You can install the development version of `PosiR` from GitHub:
-```{r}
+```{r eval = FALSE}
 # Install devtools if not already installed
 if (!requireNamespace("devtools", quietly = TRUE)) {
   install.packages("devtools")
