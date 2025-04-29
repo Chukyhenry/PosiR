@@ -1,14 +1,15 @@
 Package: PosiR
 Type: Package
 Title: Post-Selection Inference via Simultaneous Confidence Intervals
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: c(
     person("Henry", "Chukwuma",
            email = "chukyhenry55@gmail.com",
            role = c("aut", "cre")))
-Description: Provides tools for post-selection inference in linear regression models,
+Description: Post-selection inference in linear regression models,
     constructing simultaneous confidence intervals across a user-specified universe of models.
-    Implements the methodology from the reference paper to ensure valid inference after model
+    Implements the methodology described in Kuchibhotla, Kolassa, and Kuffner (2022) "Post-Selection Inference"
+    <doi:10.1146/annurev-statistics-100421-044639> to ensure valid inference after model
     selection, with applications in high-dimensional settings like Lasso selection.
 License: MIT + file LICENSE
 Encoding: UTF-8

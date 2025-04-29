@@ -70,7 +70,6 @@ Supports parallel execution, internal warnings capture, and returns structured r
 with estimates, intervals, bootstrap diagnostics, and inference statistics.
 }
 \examples{
-\dontrun{
 set.seed(123)
 X <- matrix(rnorm(100 * 2), 100, 2, dimnames = list(NULL, c("X1", "X2")))
 y <- X[,1] * 0.5 + rnorm(100)
@@ -78,7 +77,6 @@ Q <- list(model = 1:2)
 res <- simultaneous_ci(X, y, Q, B = 100, cores = 1)
 print(res$intervals)
 plot(res)
-}
 }
 \references{
 Kuchibhotla, A., Kolassa, J., & Kuffner, T. (2022). Post-selection inference.

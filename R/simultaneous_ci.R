@@ -43,7 +43,6 @@
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @import parallel
 #' @examples
-#' \dontrun{
 #' set.seed(123)
 #' X <- matrix(rnorm(100 * 2), 100, 2, dimnames = list(NULL, c("X1", "X2")))
 #' y <- X[,1] * 0.5 + rnorm(100)
@@ -51,7 +50,6 @@
 #' res <- simultaneous_ci(X, y, Q, B = 100, cores = 1)
 #' print(res$intervals)
 #' plot(res)
-#' }
 simultaneous_ci <- function(X, y, Q_universe, alpha = 0.05, B = 1000,
                             add_intercept = TRUE, bootstrap_method = "pairs",
                             cores = 1, use_pbapply = TRUE, seed = NULL, verbose = TRUE, ...) {
